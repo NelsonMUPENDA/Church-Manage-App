@@ -1,0 +1,14 @@
+// Fix pour la fin du fichier Mariage.jsx - à copier/coller dans le fichier original
+
+// Remplacer tout à partir de la ligne 1180 environ par :
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  </div>
+  );
+}
