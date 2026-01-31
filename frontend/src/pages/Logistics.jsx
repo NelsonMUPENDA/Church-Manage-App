@@ -14,6 +14,8 @@ export default function Logistics() {
   const [error, setError] = useState('');
   const [items, setItems] = useState([]);
   const [q, setQ] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterCondition, setFilterCondition] = useState('all');
 
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -85,9 +87,36 @@ export default function Logistics() {
   }, [load]);
 
   const rows = useMemo(() => {
-    const out = [...items];
-    out.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'fr', { sensitivity: 'base' }));
-    return out;
+    let filteredItems = [...items];
+    
+    // Appliquer les filtres
+    if (filterCategory !== 'all') {
+      filteredItems = filteredItems.filter(item => item.category === filterCategory);
+    }
+    
+    if (filterCondition !== 'all') {
+      filteredItems = filteredItems.filter(item => item.condition === filterCondition);
+    }
+    
+    // Appliquer la recherche textuelle
+    if (q.trim()) {
+      const searchLower = q.trim().toLowerCase();
+      filteredItems = filteredItems.filter(item => 
+        (item.name && item.name.toLowerCase().includes(searchLower)) ||
+        (item.category && item.category.toLowerCase().includes(searchLower)) ||
+        (item.asset_tag && item.asset_tag.toLowerCase().includes(searchLower)) ||
+        (item.location && item.location.toLowerCase().includes(searchLower))
+      );
+    }
+    
+    filteredItems.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'fr', { sensitivity: 'base' }));
+    return filteredItems;
+  }, [items, q, filterCategory, filterCondition]);
+
+  // Obtenir les catégories uniques pour le filtre
+  const categories = useMemo(() => {
+    const cats = [...new Set(items.map(item => item.category).filter(Boolean))];
+    return cats.sort();
   }, [items]);
 
   const openCreate = () => {
@@ -238,8 +267,8 @@ export default function Logistics() {
       </div>
 
       <div className="cpd-card p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
             <div className="relative w-full sm:w-96">
               <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               <input
@@ -249,9 +278,38 @@ export default function Logistics() {
                 className={`pl-10 ${inputClass}`}
               />
             </div>
+            
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className={`${selectClass}`}
+            >
+              <option value="all">Toutes les catégories</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            
+            <select
+              value={filterCondition}
+              onChange={(e) => setFilterCondition(e.target.value)}
+              className={`${selectClass}`}
+            >
+              <option value="all">Tous les états</option>
+              <option value="new">Neuf</option>
+              <option value="good">Bon</option>
+              <option value="fair">Moyen</option>
+              <option value="needs_repair">À réparer</option>
+              <option value="damaged">Endommagé</option>
+            </select>
           </div>
 
-          <div className="text-sm text-gray-600 dark:text-slate-300">Total: <span className="font-semibold text-gray-900 dark:text-white">{rows.length}</span></div>
+          <div className="text-sm text-gray-600 dark:text-slate-300">
+            Total: <span className="font-semibold text-gray-900 dark:text-white">{rows.length}</span>
+            {rows.length !== items.length && (
+              <span className="ml-2">({items.length} au total)</span>
+            )}
+          </div>
         </div>
 
         {error ? (

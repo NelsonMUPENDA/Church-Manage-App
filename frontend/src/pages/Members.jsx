@@ -71,7 +71,6 @@ export default function Members() {
         last_name: selected.lastName || '',
         email: selected.email || '',
         phone: selected.phone || '',
-        address: selected.address || '',
       },
       member: {
         post_name: selected.postName || '',
@@ -84,9 +83,6 @@ export default function Members() {
         education_level: selected.educationLevel || '',
         father_full_name: selected.fatherFullName || '',
         mother_full_name: selected.motherFullName || '',
-        national_id_number: selected.nationalIdNumber || '',
-        id_issue_date: selected.idIssueDate || '',
-        id_expiry_date: selected.idExpiryDate || '',
         province: selected.province || '',
         city: selected.city || '',
         commune: selected.commune || '',
@@ -96,9 +92,7 @@ export default function Members() {
         emergency_contact_name: selected.emergencyContactName || '',
         emergency_contact_phone: selected.emergencyContactPhone || '',
         emergency_contact_relation: selected.emergencyContactRelation || '',
-        spiritual_status: selected.spiritualStatus || '',
         baptism_date: selected.baptismDate || '',
-        engagement_date: selected.engagementDate || '',
         is_active: selected.status === 'Actif',
       },
     });
@@ -133,9 +127,6 @@ export default function Members() {
       educationLevel: null,
       fatherFullName: null,
       motherFullName: null,
-      nationalIdNumber: null,
-      idIssueDate: null,
-      idExpiryDate: null,
       province: null,
       city: null,
       commune: null,
@@ -145,9 +136,7 @@ export default function Members() {
       emergencyContactName: null,
       emergencyContactPhone: null,
       emergencyContactRelation: null,
-      spiritualStatus: null,
       baptismDate: null,
-      engagementDate: null,
       createdAt: null,
     });
     setForm({
@@ -171,9 +160,6 @@ export default function Members() {
         education_level: '',
         father_full_name: '',
         mother_full_name: '',
-        national_id_number: '',
-        id_issue_date: '',
-        id_expiry_date: '',
         province: '',
         city: '',
         commune: '',
@@ -183,9 +169,7 @@ export default function Members() {
         emergency_contact_name: '',
         emergency_contact_phone: '',
         emergency_contact_relation: '',
-        spiritual_status: '',
         baptism_date: '',
-        engagement_date: '',
         is_active: true,
       },
     });
@@ -273,7 +257,6 @@ export default function Members() {
             last_name: form.user?.last_name || '',
             email: form.user?.email || '',
             phone: form.user?.phone || '',
-            address: form.user?.address || '',
           });
         }
 
@@ -414,7 +397,6 @@ export default function Members() {
           username: m.user?.username || '',
           email: m.user?.email || '',
           phone: m.user?.phone || '',
-          address: m.user?.address || '',
           photo: photoUrl(p),
           status: m.is_active ? 'Actif' : 'Inactif',
           gender: m.gender || null,
@@ -426,9 +408,6 @@ export default function Members() {
           educationLevel: m.education_level || null,
           fatherFullName: m.father_full_name || null,
           motherFullName: m.mother_full_name || null,
-          nationalIdNumber: m.national_id_number || null,
-          idIssueDate: m.id_issue_date || null,
-          idExpiryDate: m.id_expiry_date || null,
           province: m.province || null,
           city: m.city || null,
           commune: m.commune || null,
@@ -438,9 +417,7 @@ export default function Members() {
           emergencyContactName: m.emergency_contact_name || null,
           emergencyContactPhone: m.emergency_contact_phone || null,
           emergencyContactRelation: m.emergency_contact_relation || null,
-          spiritualStatus: m.spiritual_status || null,
           baptismDate: m.baptism_date || null,
-          engagementDate: m.engagement_date || null,
           family: m.family || null,
           homeGroup: m.home_group || null,
           department: m.department || null,
@@ -496,7 +473,6 @@ export default function Members() {
         r.username,
         r.email,
         r.phone,
-        r.address,
         displayMemberNumber(r),
         r.nationalIdNumber,
         r.nationality,
@@ -600,7 +576,7 @@ export default function Members() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className={inputClass}
-                  placeholder="Rechercher (nom, téléphone, e-mail, N° membre, adresse)…"
+                  placeholder="Rechercher (nom, téléphone, e-mail, N° membre)…"
                 />
               </div>
             </div>
@@ -847,18 +823,6 @@ export default function Members() {
                     <div className="text-base font-semibold text-gray-900">{safe(displayMemberNumber(selected))}</div>
                   </div>
                   <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                    <div className="text-[10px] uppercase tracking-wider text-gray-500">N° pièce</div>
-                    {editing ? (
-                      <input
-                        value={form?.member?.national_id_number ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, national_id_number: e.target.value } }))}
-                        className={`mt-1 ${inputClass}`}
-                      />
-                    ) : (
-                      <div className="text-base font-semibold text-gray-900">{safe(selected.nationalIdNumber)}</div>
-                    )}
-                  </div>
-                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500">Téléphone</div>
                     {editing ? (
                       <input
@@ -985,44 +949,6 @@ export default function Members() {
                       <div className="text-base font-semibold text-gray-900">{safe(selected.educationLevel)}</div>
                     )}
                   </div>
-                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Délivrée le</div>
-                    {editing ? (
-                      <input
-                        type="date"
-                        value={form?.member?.id_issue_date ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, id_issue_date: e.target.value } }))}
-                        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2"
-                      />
-                    ) : (
-                      <div className="text-base font-semibold text-gray-900">{formatDate(selected.idIssueDate)}</div>
-                    )}
-                  </div>
-                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Expire le</div>
-                    {editing ? (
-                      <input
-                        type="date"
-                        value={form?.member?.id_expiry_date ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, id_expiry_date: e.target.value } }))}
-                        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2"
-                      />
-                    ) : (
-                      <div className="text-base font-semibold text-gray-900">{formatDate(selected.idExpiryDate)}</div>
-                    )}
-                  </div>
-                  <div className="sm:col-span-2 rounded-2xl border border-gray-200 bg-white p-4">
-                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Adresse</div>
-                    {editing ? (
-                      <input
-                        value={form?.user?.address ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, user: { ...f.user, address: e.target.value } }))}
-                        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2"
-                      />
-                    ) : (
-                      <div className="text-base font-semibold text-gray-900">{safe(selected.address)}</div>
-                    )}
-                  </div>
                   <div className="sm:col-span-2 rounded-2xl border border-gray-200 bg-white p-4">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500">Adresse détaillée</div>
                     {editing ? (
@@ -1143,18 +1069,6 @@ export default function Members() {
                     )}
                   </div>
                   <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Statut spirituel</div>
-                    {editing ? (
-                      <input
-                        value={form?.member?.spiritual_status ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, spiritual_status: e.target.value } }))}
-                        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2"
-                      />
-                    ) : (
-                      <div className="text-base font-semibold text-gray-900">{safe(selected.spiritualStatus)}</div>
-                    )}
-                  </div>
-                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500">Baptême</div>
                     {editing ? (
                       <input
@@ -1165,19 +1079,6 @@ export default function Members() {
                       />
                     ) : (
                       <div className="text-base font-semibold text-gray-900">{formatDate(selected.baptismDate)}</div>
-                    )}
-                  </div>
-                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Engagement</div>
-                    {editing ? (
-                      <input
-                        type="date"
-                        value={form?.member?.engagement_date ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, engagement_date: e.target.value } }))}
-                        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2"
-                      />
-                    ) : (
-                      <div className="text-base font-semibold text-gray-900">{formatDate(selected.engagementDate)}</div>
                     )}
                   </div>
                   <div className="rounded-2xl border border-gray-200 bg-white p-4">

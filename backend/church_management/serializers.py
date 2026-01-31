@@ -1,3 +1,7 @@
+import os
+
+from django.utils.text import slugify
+
 from rest_framework import serializers
 
 from .models import (
@@ -9,6 +13,8 @@ from .models import (
     AnnouncementLike,
     AuditLogEntry,
     Attendance,
+    ChurchBiography,
+    ChurchConsistory,
     Department,
     Document,
     Event,
@@ -70,7 +76,6 @@ class UserSerializer(serializers.ModelSerializer):
             'department_id',
             'department_name',
             'phone',
-            'address',
             'photo',
             'password',
             'created_at',
@@ -648,9 +653,57 @@ class AnnouncementDeckSerializer(serializers.ModelSerializer):
 
 
 class DocumentSerializer(serializers.ModelSerializer):
+    MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+    ALLOWED_EXTENSIONS = {'.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx'}
+
     class Meta:
         model = Document
-        fields = '__all__'
+        fields = (
+            'id',
+            'title',
+            'document_type',
+            'file',
+            'uploaded_by',
+            'uploaded_at',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'uploaded_by', 'uploaded_at', 'created_at', 'updated_at')
+
+    def validate_title(self, value):
+        title = str(value or '').strip()
+        if not title:
+            raise serializers.ValidationError('Le nom du document est requis.')
+        return title
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+
+        file = attrs.get('file')
+        title = attrs.get('title')
+
+        if self.instance is None:
+            if not file:
+                raise serializers.ValidationError({'file': 'Fichier requis.'})
+
+        if file is not None:
+            original_name = getattr(file, 'name', '') or ''
+            ext = os.path.splitext(original_name)[1].lower()
+            if ext not in self.ALLOWED_EXTENSIONS:
+                raise serializers.ValidationError({'file': 'Formats acceptés: PDF, Word, Excel, PowerPoint.'})
+
+            size = getattr(file, 'size', None)
+            if size is not None and int(size) > int(self.MAX_UPLOAD_SIZE_BYTES):
+                max_mb = round(self.MAX_UPLOAD_SIZE_BYTES / (1024 * 1024), 1)
+                raise serializers.ValidationError({'file': f'Fichier trop volumineux. Taille maximale: {max_mb} MB.'})
+
+            safe = slugify(title or '')
+            if not safe:
+                safe = 'document'
+            file.name = f'{safe}{ext}'
+            attrs['file'] = file
+
+        return attrs
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -701,3 +754,29 @@ class LogisticsItemSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'quantity': 'Quantité invalide.'})
 
         return attrs
+
+
+class ChurchBiographySerializer(serializers.ModelSerializer):
+    created_by_username = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = ChurchBiography
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at', 'updated_at', 'created_by')
+
+    def get_created_by_username(self, obj):
+        u = getattr(obj, 'created_by', None)
+        return getattr(u, 'username', None) if u else None
+
+
+class ChurchConsistorySerializer(serializers.ModelSerializer):
+    created_by_username = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = ChurchConsistory
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at', 'updated_at', 'created_by')
+
+    def get_created_by_username(self, obj):
+        u = getattr(obj, 'created_by', None)
+        return getattr(u, 'username', None) if u else None

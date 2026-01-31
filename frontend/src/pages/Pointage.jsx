@@ -453,9 +453,9 @@ export default function Pointage() {
                 type="button"
                 onClick={saveAll}
                 disabled={!selectedEventId || savingAll || savingAgg || savingVisitors || savingConsumption}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow hover:shadow-lg disabled:opacity-60"
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                whileHover={{ scale: !savingAll && !savingAgg && !savingVisitors && !savingConsumption ? 1.03 : 1 }}
+                whileTap={{ scale: !savingAll && !savingAgg && !savingVisitors && !savingConsumption ? 0.98 : 1 }}
               >
                 <CheckCircleIcon className="h-5 w-5" />
                 {savingAll ? 'Enregistrement…' : 'Enregistrer'}

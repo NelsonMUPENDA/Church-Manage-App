@@ -9,9 +9,9 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin):
-    list_display = ['member_number', 'user', 'birth_date', 'gender', 'nationality', 'national_id_number', 'spiritual_status', 'is_active', 'created_at']
-    list_filter = ['gender', 'nationality', 'spiritual_status', 'is_active', 'created_at']
-    search_fields = ['member_number', 'national_id_number', 'user__username', 'user__email', 'user__phone']
+    list_display = ['member_number', 'user', 'birth_date', 'gender', 'nationality', 'is_active', 'created_at']
+    list_filter = ['gender', 'nationality', 'is_active', 'created_at']
+    search_fields = ['member_number', 'user__username', 'user__email', 'user__phone']
 
 @admin.register(Family)
 class FamilyAdmin(admin.ModelAdmin):

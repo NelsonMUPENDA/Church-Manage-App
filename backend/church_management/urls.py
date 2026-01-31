@@ -15,6 +15,8 @@ from .api import (
     ApprovalRequestViewSet,
     BaptismCandidateViewSet,
     BaptismEventViewSet,
+    ChurchBiographyViewSet,
+    ChurchConsistoryViewSet,
     DashboardSummaryView,
     DepartmentViewSet,
     DocumentViewSet,
@@ -59,6 +61,8 @@ router.register(r'reports', ReportViewSet, basename='reports')
 router.register(r'audit-logs', AuditLogEntryViewSet, basename='audit-logs')
 router.register(r'notifications', NotificationViewSet, basename='notifications')
 router.register(r'approval-requests', ApprovalRequestViewSet, basename='approval-requests')
+router.register(r'church-biography', ChurchBiographyViewSet, basename='church-biography')
+router.register(r'church-consistory', ChurchConsistoryViewSet, basename='church-consistory')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

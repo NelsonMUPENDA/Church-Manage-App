@@ -52,6 +52,8 @@ from .models import (
     ApprovalRequest,
     AuditLogEntry,
     Attendance,
+    ChurchBiography,
+    ChurchConsistory,
     Department,
     Document,
     Event,
@@ -93,6 +95,8 @@ from .serializers import (
     ApprovalRequestSerializer,
     AuditLogEntrySerializer,
     AttendanceSerializer,
+    ChurchBiographySerializer,
+    ChurchConsistorySerializer,
     DepartmentSerializer,
     DocumentSerializer,
     EventAttendanceAggregateSerializer,
@@ -1536,12 +1540,13 @@ class EventViewSet(viewsets.ModelViewSet):
             'department_checkin',
             'activity_report',
             'activity_report_pdf',
+            'attendance_report',
             'validate_closure',
             'set_alert',
             'clear_alert',
         }:
             act = getattr(self, 'action', None)
-            if act in {'attendance_aggregate', 'visitor_aggregate', 'department_members', 'department_checkin'}:
+            if act in {'attendance_aggregate', 'visitor_aggregate', 'department_members', 'department_checkin', 'attendance_report'}:
                 return [IsSecretaryOrAdmin()]
             if act in {'logistics_consumption'}:
                 return [IsLogisticsHeadOrAdmin()]
@@ -2367,6 +2372,348 @@ class EventViewSet(viewsets.ModelViewSet):
         resp = HttpResponse(pdf, content_type='application/pdf')
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
         return resp
+
+    @action(detail=True, methods=['get'], url_path='attendance-report')
+    def attendance_report(self, request, pk=None):
+        event = self.get_object()
+        format_type = request.query_params.get('format', 'pdf').lower()
+        
+        if format_type not in ['pdf', 'csv']:
+            return Response({'error': 'Format must be pdf or csv'}, status=400)
+        
+        if format_type == 'pdf':
+            return self._attendance_report_pdf(request, event)
+        else:
+            return self._attendance_report_csv(request, event)
+
+    def _attendance_report_pdf(self, request, event):
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.colors import black, grey
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        try:
+            width, height = A4
+            margin = 15 * mm
+            
+            # Créer le buffer avec une taille suffisante
+            buf = io.BytesIO()
+            c = canvas.Canvas(buf, pagesize=A4)
+            
+            # Configuration des polices
+            c.setFillColor(black)
+            
+            # En-tête avec cadre
+            c.setStrokeColor(grey)
+            c.setLineWidth(1)
+            c.rect(margin - 5, height - margin - 70, width - 2*margin + 10, 65, fill=0)
+            
+            # Titre
+            c.setFont("Helvetica-Bold", 16)
+            title_text = f"Rapport de Pointage - {event.title or 'Événement'}"
+            # Limiter la longueur du titre pour éviter les dépassements
+            if len(title_text) > 60:
+                title_text = title_text[:57] + "..."
+            c.drawString(margin, height - margin - 20, title_text)
+            
+            # Informations événement
+            c.setFont("Helvetica", 11)
+            y_pos = height - margin - 40
+            
+            date_str = event.date.strftime('%d/%m/%Y') if event.date else 'Non spécifiée'
+            c.drawString(margin, y_pos, f"Date: {date_str}")
+            y_pos -= 15
+            
+            if event.time:
+                time_str = event.time.strftime('%H:%M') if event.time else ''
+                c.drawString(margin, y_pos, f"Heure: {time_str}")
+                y_pos -= 15
+            
+            if event.location:
+                location_text = event.location[:50] + "..." if len(event.location) > 50 else event.location
+                c.drawString(margin, y_pos, f"Lieu: {location_text}")
+                y_pos -= 15
+            
+            # Ligne de séparation
+            c.setStrokeColor(grey)
+            c.setLineWidth(0.5)
+            c.line(margin, y_pos, width - margin, y_pos)
+            y_pos -= 25
+            
+            # Section Participants
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(margin, y_pos, "PARTICIPANTS")
+            y_pos -= 20
+            
+            try:
+                attendance_agg = EventAttendanceAggregate.objects.filter(event=event).first()
+                
+                if attendance_agg:
+                    c.setFont("Helvetica", 11)
+                    
+                    # Calculs sécurisés
+                    male_adults = max(0, attendance_agg.male_adults or 0)
+                    female_adults = max(0, attendance_agg.female_adults or 0)
+                    male_children = max(0, attendance_agg.male_children or 0)
+                    female_children = max(0, attendance_agg.female_children or 0)
+                    
+                    total_participants = male_adults + female_adults + male_children + female_children
+                    
+                    # Tableau des statistiques
+                    stats_data = [
+                        ("Total participants", total_participants),
+                        ("Hommes adultes", male_adults),
+                        ("Femmes adultes", female_adults),
+                        ("Garçons", male_children),
+                        ("Filles", female_children)
+                    ]
+                    
+                    for label, value in stats_data:
+                        c.drawString(margin + 10, y_pos, f"{label}: {value}")
+                        y_pos -= 15
+                else:
+                    c.setFont("Helvetica", 11)
+                    c.drawString(margin + 10, y_pos, "Aucune donnée de pointage enregistrée")
+                    y_pos -= 15
+                
+            except Exception as agg_error:
+                logger.error(f"Erreur lors de la récupération des agrégats: {agg_error}")
+                c.setFont("Helvetica", 11)
+                c.drawString(margin + 10, y_pos, "Erreur dans les données de participants")
+                y_pos -= 15
+            
+            y_pos -= 10
+            
+            # Section Visiteurs
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(margin, y_pos, "VISITEURS")
+            y_pos -= 20
+            
+            try:
+                visitor_agg = EventVisitorAggregate.objects.filter(event=event).first()
+                
+                if visitor_agg:
+                    c.setFont("Helvetica", 11)
+                    
+                    male_visitors = max(0, visitor_agg.male_visitors or 0)
+                    female_visitors = max(0, visitor_agg.female_visitors or 0)
+                    total_visitors = male_visitors + female_visitors
+                    
+                    visitor_stats = [
+                        ("Total visiteurs", total_visitors),
+                        ("Hommes visiteurs", male_visitors),
+                        ("Femmes visiteuses", female_visitors)
+                    ]
+                    
+                    for label, value in visitor_stats:
+                        c.drawString(margin + 10, y_pos, f"{label}: {value}")
+                        y_pos -= 15
+                else:
+                    c.setFont("Helvetica", 11)
+                    c.drawString(margin + 10, y_pos, "Aucune donnée de visiteurs enregistrée")
+                    y_pos -= 15
+                    
+            except Exception as visitor_error:
+                logger.error(f"Erreur lors de la récupération des visiteurs: {visitor_error}")
+                c.setFont("Helvetica", 11)
+                c.drawString(margin + 10, y_pos, "Erreur dans les données de visiteurs")
+                y_pos -= 15
+            
+            y_pos -= 10
+            
+            # Section présence individuelle (si espace disponible)
+            if y_pos > margin + 80:  # Vérifier s'il y a assez d'espace
+                try:
+                    attendances = Attendance.objects.filter(event=event, attended=True).select_related('member__user')[:15]
+                    
+                    if attendances:
+                        c.setFont("Helvetica-Bold", 14)
+                        c.drawString(margin, y_pos, "PRÉSENCE INDIVIDUELLE (15 premiers)")
+                        y_pos -= 20
+                        
+                        c.setFont("Helvetica", 10)
+                        for attendance in attendances:
+                            if y_pos < margin + 30:  # Nouvelle page si nécessaire
+                                c.showPage()
+                                y_pos = height - margin - 30
+                                c.setFont("Helvetica", 10)
+                            
+                            member = attendance.member
+                            if member and member.user:
+                                name_parts = [
+                                    member.user.first_name or '',
+                                    member.post_name or '',
+                                    member.user.last_name or ''
+                                ]
+                                name = ' '.join(filter(None, name_parts))
+                                # Limiter la longueur pour éviter les dépassements
+                                if len(name) > 45:
+                                    name = name[:42] + "..."
+                                c.drawString(margin + 10, y_pos, name)
+                                y_pos -= 12
+                
+                except Exception as attendance_error:
+                    logger.error(f"Erreur lors de la récupération des présences: {attendance_error}")
+                    # Ne pas afficher d'erreur pour éviter de surcharger le PDF
+            
+            # Pied de page
+            c.setFont("Helvetica-Oblique", 9)
+            c.setFillColor(grey)
+            footer_text = f"Généré le {timezone.now().strftime('%d/%m/%Y %H:%M')} - Consolation et Paix Divine"
+            c.drawString(margin, margin - 10, footer_text)
+            
+            # Finaliser le PDF
+            c.save()
+            
+            # Récupérer les données du PDF
+            pdf_data = buf.getvalue()
+            buf.close()
+            
+            # Vérifier que le PDF n'est pas vide
+            if len(pdf_data) < 1000:  # Un PDF valide doit avoir plus de 1KB
+                raise ValueError("PDF généré trop petit, probablement corrompu")
+            
+            # Créer la réponse HTTP
+            filename = f"rapport_pointage_{event.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            response = HttpResponse(pdf_data, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            response['Content-Length'] = len(pdf_data)
+            
+            logger.info(f"PDF généré avec succès: {filename} ({len(pdf_data)} bytes)")
+            return response
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la génération PDF: {str(e)}", exc_info=True)
+            
+            # En cas d'erreur, générer un PDF minimal avec le message d'erreur
+            try:
+                buf = io.BytesIO()
+                c = canvas.Canvas(buf, pagesize=A4)
+                c.setFont("Helvetica", 12)
+                c.drawString(50, 750, "ERREUR LORS DE LA GÉNÉRATION DU RAPPORT")
+                c.setFont("Helvetica", 10)
+                error_msg = str(e)[:100]  # Limiter la longueur du message d'erreur
+                c.drawString(50, 730, f"Détail: {error_msg}")
+                c.drawString(50, 710, "Veuillez contacter l'administrateur système.")
+                c.save()
+                
+                error_pdf = buf.getvalue()
+                buf.close()
+                
+                filename = f"erreur_rapport_pointage_{event.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                response = HttpResponse(error_pdf, content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                return response
+                
+            except Exception as fallback_error:
+                # Si même le PDF d'erreur échoue, retourner une erreur HTTP
+                logger.error(f"Erreur critique lors de la génération du PDF d'erreur: {fallback_error}")
+                return Response(
+                    {'error': f'Erreur critique lors de la génération du PDF: {str(e)}'}, 
+                    status=500
+                )
+
+    def _attendance_report_csv(self, request, event):
+        import csv
+        from django.utils.encoding import smart_str
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        filename = f"rapport_pointage_{event.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        writer = csv.writer(response)
+        
+        try:
+            # En-tête CSV
+            writer.writerow(['RAPPORT DE POINTAGE'])
+            writer.writerow(['Événement', event.title or 'Non spécifié'])
+            
+            date_str = event.date.strftime('%d/%m/%Y') if event.date else 'Non spécifiée'
+            writer.writerow(['Date', date_str])
+            
+            if event.time:
+                time_str = event.time.strftime('%H:%M') if event.time else ''
+                writer.writerow(['Heure', time_str])
+            
+            if event.location:
+                writer.writerow(['Lieu', event.location])
+            
+            writer.writerow([])
+            
+            # Participants
+            writer.writerow(['PARTICIPANTS'])
+            writer.writerow(['Catégorie', 'Nombre'])
+            
+            attendance_agg = EventAttendanceAggregate.objects.filter(event=event).first()
+            
+            if attendance_agg:
+                male_adults = attendance_agg.male_adults or 0
+                female_adults = attendance_agg.female_adults or 0
+                male_children = attendance_agg.male_children or 0
+                female_children = attendance_agg.female_children or 0
+                
+                total_participants = male_adults + female_adults + male_children + female_children
+                writer.writerow(['Total participants', total_participants])
+                writer.writerow(['Hommes adultes', male_adults])
+                writer.writerow(['Femmes adultes', female_adults])
+                writer.writerow(['Garçons', male_children])
+                writer.writerow(['Filles', female_children])
+            else:
+                writer.writerow(['Total participants', 0])
+                writer.writerow(['Hommes adultes', 0])
+                writer.writerow(['Femmes adultes', 0])
+                writer.writerow(['Garçons', 0])
+                writer.writerow(['Filles', 0])
+            
+            writer.writerow([])
+            
+            # Visiteurs
+            writer.writerow(['VISITEURS'])
+            writer.writerow(['Catégorie', 'Nombre'])
+            
+            visitor_agg = EventVisitorAggregate.objects.filter(event=event).first()
+            
+            if visitor_agg:
+                male_visitors = visitor_agg.male_visitors or 0
+                female_visitors = visitor_agg.female_visitors or 0
+                
+                total_visitors = male_visitors + female_visitors
+                writer.writerow(['Total visiteurs', total_visitors])
+                writer.writerow(['Hommes visiteurs', male_visitors])
+                writer.writerow(['Femmes visiteuses', female_visitors])
+            else:
+                writer.writerow(['Total visiteurs', 0])
+                writer.writerow(['Hommes visiteurs', 0])
+                writer.writerow(['Femmes visiteuses', 0])
+            
+            writer.writerow([])
+            
+            # Présence individuelle
+            attendances = Attendance.objects.filter(event=event, attended=True).select_related('member__user')
+            if attendances.exists():
+                writer.writerow(['PRÉSENCE INDIVIDUELLE'])
+                writer.writerow(['Nom', 'Postnom', 'Nom de famille', 'Téléphone'])
+                
+                for attendance in attendances:
+                    member = attendance.member
+                    if member and member.user:
+                        first_name = member.user.first_name or ''
+                        post_name = member.post_name or ''
+                        last_name = member.user.last_name or ''
+                        phone = member.user.phone or ''
+                        writer.writerow([first_name, post_name, last_name, phone])
+            else:
+                writer.writerow(['PRÉSENCE INDIVIDUELLE'])
+                writer.writerow(['Aucune présence enregistrée'])
+            
+        except Exception as e:
+            writer.writerow(['ERREUR'])
+            writer.writerow(['Message', f'Erreur lors de la génération: {str(e)}'])
+        
+        return response
 
     def _event_program_pdf(self, request, event):
         width, height = A4
@@ -4631,7 +4978,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        obj = serializer.save(uploaded_by=self.request.user, uploaded_at=timezone.now())
+        obj = serializer.save(uploaded_by=self.request.user)
         AuditLogEntry.objects.create(
             actor=self.request.user,
             action='create',
@@ -4837,3 +5184,83 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
             msg = f"{msg} Motif: {ar.rejection_reason}".strip()
         _notify_user(ar.requested_by, 'Action refusée', msg)
         return Response(ApprovalRequestSerializer(ar).data)
+
+
+class ChurchBiographyViewSet(viewsets.ModelViewSet):
+    """ViewSet pour gérer la biographie de l'église"""
+    queryset = ChurchBiography.objects.all()
+    serializer_class = ChurchBiographySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.filter(is_active=True).order_by('-updated_at')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+        self._log_action('create', serializer.instance)
+
+    def perform_update(self, serializer):
+        serializer.save()
+        self._log_action('update', serializer.instance)
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        obj.is_active = False
+        obj.save()
+        self._log_action('delete', obj)
+        return Response(status=204)
+
+    def _log_action(self, action, obj):
+        AuditLogEntry.objects.create(
+            actor=getattr(self.request, 'user', None),
+            action=action,
+            model='ChurchBiography',
+            object_id=str(getattr(obj, 'pk', '')),
+            object_repr=getattr(obj, 'title', None) or str(getattr(obj, 'pk', '')),
+            ip_address=_client_ip(self.request),
+            payload={
+                'title': getattr(obj, 'title', None),
+                'is_active': getattr(obj, 'is_active', None),
+            },
+        )
+
+
+class ChurchConsistoryViewSet(viewsets.ModelViewSet):
+    """ViewSet pour gérer les informations du consistoire"""
+    queryset = ChurchConsistory.objects.all()
+    serializer_class = ChurchConsistorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.filter(is_active=True).order_by('-updated_at')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+        self._log_action('create', serializer.instance)
+
+    def perform_update(self, serializer):
+        serializer.save()
+        self._log_action('update', serializer.instance)
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        obj.is_active = False
+        obj.save()
+        self._log_action('delete', obj)
+        return Response(status=204)
+
+    def _log_action(self, action, obj):
+        AuditLogEntry.objects.create(
+            actor=getattr(self.request, 'user', None),
+            action=action,
+            model='ChurchConsistory',
+            object_id=str(getattr(obj, 'pk', '')),
+            object_repr=getattr(obj, 'title', None) or str(getattr(obj, 'pk', '')),
+            ip_address=_client_ip(self.request),
+            payload={
+                'title': getattr(obj, 'title', None),
+                'is_active': getattr(obj, 'is_active', None),
+            },
+        )

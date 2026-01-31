@@ -19,7 +19,6 @@ class User(AbstractUser):
     ]
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='visitor')
     phone = models.CharField(max_length=20, blank=True, null=True)
-    address = models.TextField(blank=True, null=True)
     photo = models.ImageField(upload_to='photos/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -29,12 +28,6 @@ class Member(models.Model):
         ('M', 'Male'),
         ('F', 'Female'),
         ('O', 'Other'),
-    ]
-    SPIRITUAL_STATUS_CHOICES = [
-        ('new believer', 'New Believer'),
-        ('growing', 'Growing'),
-        ('mature', 'Mature'),
-        ('leader', 'Leader'),
     ]
     user = models.OneToOneField(User, on_delete=models.SET_NULL, blank=True, null=True)
     member_number = models.CharField(max_length=20, unique=True, blank=True, null=True)
@@ -48,9 +41,6 @@ class Member(models.Model):
     education_level = models.CharField(max_length=120, blank=True, null=True)
     father_full_name = models.CharField(max_length=150, blank=True, null=True)
     mother_full_name = models.CharField(max_length=150, blank=True, null=True)
-    national_id_number = models.CharField(max_length=40, blank=True, null=True)
-    id_issue_date = models.DateField(blank=True, null=True)
-    id_expiry_date = models.DateField(blank=True, null=True)
     province = models.CharField(max_length=80, blank=True, null=True)
     city = models.CharField(max_length=80, blank=True, null=True)
     commune = models.CharField(max_length=80, blank=True, null=True)
@@ -60,9 +50,7 @@ class Member(models.Model):
     emergency_contact_name = models.CharField(max_length=150, blank=True, null=True)
     emergency_contact_phone = models.CharField(max_length=30, blank=True, null=True)
     emergency_contact_relation = models.CharField(max_length=60, blank=True, null=True)
-    spiritual_status = models.CharField(max_length=20, choices=SPIRITUAL_STATUS_CHOICES, blank=True, null=True)
     baptism_date = models.DateField(blank=True, null=True)
-    engagement_date = models.DateField(blank=True, null=True)
     family = models.ForeignKey('Family', on_delete=models.SET_NULL, blank=True, null=True, related_name='members')
     home_group = models.ForeignKey('HomeGroup', on_delete=models.SET_NULL, blank=True, null=True, related_name='members')
     department = models.ForeignKey('Department', on_delete=models.SET_NULL, blank=True, null=True, related_name='members')
@@ -523,3 +511,37 @@ class ReportCertificate(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='report_certificates')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class ChurchBiography(models.Model):
+    """Modèle pour gérer la biographie de l'église"""
+    title = models.CharField(max_length=200, default="Biographie de l'église")
+    content = models.TextField(help_text="Contenu de la biographie de l'église")
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='biographies')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Biographie de l'église"
+        verbose_name_plural = "Biographies de l'église"
+
+    def __str__(self):
+        return self.title
+
+
+class ChurchConsistory(models.Model):
+    """Modèle pour gérer les informations du consistoire"""
+    title = models.CharField(max_length=200, default="Consistoire de l'église")
+    content = models.TextField(help_text="Contenu des informations du consistoire")
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='consistories')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Consistoire de l'église"
+        verbose_name_plural = "Consistoires de l'église"
+
+    def __str__(self):
+        return self.title
