@@ -74,6 +74,7 @@ from .models import (
     LogisticsItem,
     Member,
     Ministry,
+    ActivityDuration,
     Notification,
     ReportCertificate,
     User,
@@ -99,6 +100,7 @@ from .serializers import (
     ChurchConsistorySerializer,
     DepartmentSerializer,
     DocumentSerializer,
+    ActivityDurationSerializer,
     EventAttendanceAggregateSerializer,
     EventVisitorAggregateSerializer,
     EventLogisticsConsumptionSerializer,
@@ -840,6 +842,21 @@ class MinistryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrSuperAdmin]
 
 
+class ActivityDurationViewSet(viewsets.ModelViewSet):
+    queryset = ActivityDuration.objects.all().order_by('sort_order', 'label', 'id')
+    serializer_class = ActivityDurationSerializer
+    permission_classes = [IsAdminOrSuperAdminOrReadOnly]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        is_active = (self.request.query_params.get('is_active') or '').strip().lower()
+        if is_active in {'1', 'true', 'yes'}:
+            qs = qs.filter(is_active=True)
+        elif is_active in {'0', 'false', 'no'}:
+            qs = qs.filter(is_active=False)
+        return qs
+
+
 class MemberViewSet(viewsets.ModelViewSet):
     queryset = Member.objects.select_related('user').all().order_by('-id')
     serializer_class = MemberSerializer
@@ -902,62 +919,164 @@ class MemberViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='export')
     def export(self, request):
-        buf = io.StringIO()
-        w = csv.writer(buf)
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+            from openpyxl.utils import get_column_letter
+            from openpyxl.worksheet.table import Table, TableStyleInfo
+        except ModuleNotFoundError:
+            return Response(
+                {
+                    'detail': "Le module 'openpyxl' n'est pas installé sur le serveur. Installez-le puis relancez le backend.",
+                },
+                status=500,
+            )
 
-        w.writerow([
-            'member_number',
-            'first_name',
-            'last_name',
-            'username',
-            'email',
-            'phone',
-            'address',
-            'gender',
-            'birth_date',
-            'place_of_birth',
-            'nationality',
-            'marital_status',
-            'occupation',
-            'education_level',
-            'province',
-            'city',
-            'commune',
-            'quarter',
-            'is_active',
-            'created_at',
-        ])
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Membres'
+
+        headers = [
+            'N° Membre',
+            'Prénom',
+            'Postnom',
+            'Nom',
+            'Téléphone',
+            'Email',
+            'Sexe',
+            'Date de naissance',
+            'Lieu de naissance',
+            'Nationalité',
+            'État civil',
+            'Profession',
+            'Fonction publique',
+            'Poste à l’église',
+            'Niveau d’étude',
+            'Province',
+            'Ville',
+            'Commune',
+            'Quartier',
+            'Avenue',
+            'N° maison',
+            'Actif',
+            'Cause inactivité',
+            'Créé le',
+        ]
+
+        ws.append(headers)
+
+        header_fill = PatternFill('solid', fgColor='1F4E79')
+        header_font = Font(bold=True, color='FFFFFF')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin = Side(style='thin', color='D9D9D9')
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        ws.row_dimensions[1].height = 28
+        for col_idx, _ in enumerate(headers, start=1):
+            c = ws.cell(row=1, column=col_idx)
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = header_alignment
+            c.border = border
+
+        date_cols = {8}
+        created_cols = {24}
 
         for m in self.get_queryset().select_related('user'):
             u = getattr(m, 'user', None)
-            w.writerow([
+            created_at = getattr(m, 'created_at', None)
+            if created_at:
+                try:
+                    created_at = timezone.localtime(created_at).replace(tzinfo=None)
+                except Exception:
+                    created_at = None
+
+            ws.append([
                 m.member_number or '',
                 getattr(u, 'first_name', '') if u else '',
+                m.post_name or '',
                 getattr(u, 'last_name', '') if u else '',
-                getattr(u, 'username', '') if u else '',
-                getattr(u, 'email', '') if u else '',
                 getattr(u, 'phone', '') if u else '',
-                getattr(u, 'address', '') if u else '',
+                getattr(u, 'email', '') if u else '',
                 m.gender or '',
-                m.birth_date.isoformat() if getattr(m, 'birth_date', None) else '',
+                getattr(m, 'birth_date', None),
                 m.place_of_birth or '',
                 m.nationality or '',
                 m.marital_status or '',
                 m.occupation or '',
+                getattr(m, 'public_function', None) or '',
+                getattr(m, 'church_position', None) or '',
                 m.education_level or '',
                 m.province or '',
                 m.city or '',
                 m.commune or '',
                 m.quarter or '',
-                '1' if m.is_active else '0',
-                m.created_at.isoformat() if getattr(m, 'created_at', None) else '',
+                m.avenue or '',
+                m.house_number or '',
+                'Oui' if m.is_active else 'Non',
+                getattr(m, 'inactive_reason', None) or '',
+                created_at,
             ])
 
-        content = buf.getvalue()
-        buf.close()
+        last_row = ws.max_row
+        last_col = ws.max_column
 
-        filename = f"members_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        resp = HttpResponse(content, content_type='text/csv; charset=utf-8')
+        body_alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+        for row in ws.iter_rows(min_row=2, max_row=last_row, min_col=1, max_col=last_col):
+            for cell in row:
+                cell.alignment = body_alignment
+                cell.border = border
+
+        for r in range(2, last_row + 1):
+            for c in date_cols:
+                ws.cell(row=r, column=c).number_format = 'dd/mm/yyyy'
+            for c in created_cols:
+                ws.cell(row=r, column=c).number_format = 'dd/mm/yyyy hh:mm'
+
+        ws.freeze_panes = 'A2'
+
+        if last_row >= 2:
+            table_ref = f"A1:{get_column_letter(last_col)}{last_row}"
+            table = Table(displayName='MembersTable', ref=table_ref)
+            style = TableStyleInfo(
+                name='TableStyleMedium9',
+                showFirstColumn=False,
+                showLastColumn=False,
+                showRowStripes=True,
+                showColumnStripes=False,
+            )
+            table.tableStyleInfo = style
+            ws.add_table(table)
+
+        for col_idx in range(1, last_col + 1):
+            max_len = 0
+            for cell in ws[get_column_letter(col_idx)]:
+                v = cell.value
+                if v is None:
+                    continue
+                if hasattr(v, 'strftime'):
+                    s = v.strftime('%d/%m/%Y')
+                else:
+                    s = str(v)
+                if len(s) > max_len:
+                    max_len = len(s)
+            ws.column_dimensions[get_column_letter(col_idx)].width = min(max(10, max_len + 2), 45)
+
+        ws.sheet_view.showGridLines = False
+        ws.print_title_rows = '1:1'
+        ws.page_setup.orientation = 'landscape'
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        filename = f"members_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        resp = HttpResponse(
+            out.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
         return resp
 
@@ -971,6 +1090,148 @@ class MemberViewSet(viewsets.ModelViewSet):
         img = qrcode.make(payload, image_factory=qrcode.image.svg.SvgPathImage)
         svg = img.to_string().decode('utf-8')
         return HttpResponse(svg, content_type='image/svg+xml')
+
+    @action(detail=True, methods=['get'], url_path='fiche')
+    def fiche(self, request, pk=None):
+        member = self.get_object()
+        u = getattr(member, 'user', None)
+
+        buf = io.BytesIO()
+        c = canvas.Canvas(buf, pagesize=A4)
+        w, h = A4
+
+        def _s(v):
+            return '' if v is None else str(v)
+
+        def _wrap(text, max_chars=95):
+            s = _s(text).strip()
+            if not s:
+                return ['—']
+            out = []
+            cur = ''
+            for part in s.split(' '):
+                if not cur:
+                    cur = part
+                    continue
+                if len(cur) + 1 + len(part) <= max_chars:
+                    cur = f"{cur} {part}"
+                else:
+                    out.append(cur)
+                    cur = part
+            if cur:
+                out.append(cur)
+            return out
+
+        title = 'FICHE MEMBRE'
+        member_no = member.member_number or f"ID {member.id}"
+        full_name = ' '.join([_s(getattr(u, 'first_name', '')).strip(), _s(getattr(member, 'post_name', '')).strip(), _s(getattr(u, 'last_name', '')).strip()]).strip()
+
+        top = h - 22 * mm
+        left = 16 * mm
+        right = w - 16 * mm
+
+        c.setFillColorRGB(0.12, 0.31, 0.47)
+        c.rect(0, h - 30 * mm, w, 30 * mm, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont('Helvetica-Bold', 16)
+        c.drawString(left, h - 18 * mm, title)
+        c.setFont('Helvetica', 10)
+        c.drawRightString(right, h - 18 * mm, f"N° {member_no}")
+
+        c.setFillColorRGB(0, 0, 0)
+        y = top - 18 * mm
+
+        def section(label):
+            nonlocal y
+            y -= 6 * mm
+            c.setFont('Helvetica-Bold', 11)
+            c.setFillColorRGB(0.12, 0.31, 0.47)
+            c.drawString(left, y, label)
+            c.setFillColorRGB(0, 0, 0)
+            y -= 4 * mm
+
+        def kv(label, value):
+            nonlocal y
+            if y < 22 * mm:
+                c.showPage()
+                y = h - 20 * mm
+            c.setFont('Helvetica-Bold', 9)
+            c.drawString(left, y, f"{label} :")
+            c.setFont('Helvetica', 9)
+            lines = _wrap(value, max_chars=95)
+            first_x = left + 40 * mm
+            for i, line in enumerate(lines):
+                if y < 22 * mm:
+                    c.showPage()
+                    y = h - 20 * mm
+                    c.setFont('Helvetica', 9)
+                c.drawString(first_x, y, line if i > 0 else line)
+                if i < len(lines) - 1:
+                    y -= 4 * mm
+            y -= 5 * mm
+
+        section('IDENTITÉ')
+        kv('Nom complet', full_name or '—')
+        kv('Sexe', member.gender or '—')
+        kv('Date de naissance', member.birth_date.strftime('%d/%m/%Y') if getattr(member, 'birth_date', None) else '—')
+        kv('Lieu de naissance', member.place_of_birth or '—')
+        kv('Nationalité', member.nationality or '—')
+        kv('État civil', member.marital_status or '—')
+
+        section('CONTACT')
+        kv('Téléphone', getattr(u, 'phone', None) or '—')
+        kv('Email', getattr(u, 'email', None) or '—')
+
+        section('PROFESSION')
+        kv('Profession', member.occupation or '—')
+        kv('Fonction publique', getattr(member, 'public_function', None) or '—')
+        kv('Poste à l’église', getattr(member, 'church_position', None) or '—')
+        kv('Niveau d’étude', member.education_level or '—')
+
+        section('ADRESSE')
+        kv('Province', member.province or '—')
+        kv('Ville', member.city or '—')
+        kv('Commune', member.commune or '—')
+        kv('Quartier', member.quarter or '—')
+        kv('Avenue', member.avenue or '—')
+        kv('N° maison', member.house_number or '—')
+
+        section('INFORMATIONS ÉGLISE')
+        kv('Famille', _s(getattr(getattr(member, 'family', None), 'name', None)) or '—')
+        kv('Groupe', _s(getattr(getattr(member, 'home_group', None), 'name', None)) or '—')
+        kv('Département', _s(getattr(getattr(member, 'department', None), 'name', None)) or '—')
+        kv('Ministère', _s(getattr(getattr(member, 'ministry', None), 'name', None)) or '—')
+        kv('Date de baptême', member.baptism_date.strftime('%d/%m/%Y') if getattr(member, 'baptism_date', None) else '—')
+
+        section('STATUT')
+        kv('Actif', 'Oui' if member.is_active else 'Non')
+        kv('Cause inactivité', getattr(member, 'inactive_reason', None) or '—')
+
+        section('URGENCE')
+        kv('Nom', member.emergency_contact_name or '—')
+        kv('Téléphone', member.emergency_contact_phone or '—')
+        kv('Lien', member.emergency_contact_relation or '—')
+
+        created_at = getattr(member, 'created_at', None)
+        if created_at:
+            try:
+                created_at = timezone.localtime(created_at).strftime('%d/%m/%Y %H:%M')
+            except Exception:
+                created_at = None
+        c.setFont('Helvetica', 8)
+        c.setFillColorRGB(0.35, 0.35, 0.35)
+        c.drawRightString(right, 12 * mm, f"Créé le: {created_at or '—'}")
+
+        c.showPage()
+        c.save()
+        pdf = buf.getvalue()
+        buf.close()
+
+        safe_no = re.sub(r'[^A-Za-z0-9_-]+', '_', member_no)
+        filename = f"fiche_membre_{safe_no}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        resp = HttpResponse(pdf, content_type='application/pdf')
+        resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
 
 
 class BaptismEventViewSet(viewsets.ModelViewSet):
@@ -2743,7 +3004,8 @@ class EventViewSet(viewsets.ModelViewSet):
             return value
 
         event_type_lbl = label_for_choice(getattr(Event, 'EVENT_TYPE_CHOICES', []), event_type)
-        duration_lbl = label_for_choice(getattr(Event, 'DURATION_CHOICES', []), duration_type)
+        duration_obj = ActivityDuration.objects.filter(code=duration_type).only('label').first()
+        duration_lbl = getattr(duration_obj, 'label', None) or label_for_choice(getattr(Event, 'DURATION_CHOICES', []), duration_type)
 
         frontend_base = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:3000')
         public_link = None

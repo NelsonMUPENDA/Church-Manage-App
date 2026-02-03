@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
@@ -38,6 +40,8 @@ class Member(models.Model):
     nationality = models.CharField(max_length=80, blank=True, null=True)
     marital_status = models.CharField(max_length=30, blank=True, null=True)
     occupation = models.CharField(max_length=120, blank=True, null=True)
+    public_function = models.CharField(max_length=120, blank=True, null=True)
+    church_position = models.CharField(max_length=120, blank=True, null=True)
     education_level = models.CharField(max_length=120, blank=True, null=True)
     father_full_name = models.CharField(max_length=150, blank=True, null=True)
     mother_full_name = models.CharField(max_length=150, blank=True, null=True)
@@ -56,6 +60,7 @@ class Member(models.Model):
     department = models.ForeignKey('Department', on_delete=models.SET_NULL, blank=True, null=True, related_name='members')
     ministry = models.ForeignKey('Ministry', on_delete=models.SET_NULL, blank=True, null=True, related_name='members')
     is_active = models.BooleanField(default=True)
+    inactive_reason = models.CharField(max_length=30, blank=True, null=True)
     archived_date = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -96,6 +101,15 @@ class Ministry(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
+class ActivityDuration(models.Model):
+    code = models.CharField(max_length=20, unique=True)
+    label = models.CharField(max_length=60)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
 class Event(models.Model):
     EVENT_TYPE_CHOICES = [
         ('service', 'Service'),
@@ -124,7 +138,7 @@ class Event(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
     event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES, default='service')
-    duration_type = models.CharField(max_length=10, choices=DURATION_CHOICES, default='daily')
+    duration_type = models.CharField(max_length=20, default='daily')
     date = models.DateField()
     time = models.TimeField()
     location = models.TextField(blank=True, null=True)
@@ -463,6 +477,11 @@ class LogisticsItem(models.Model):
         ('damaged', 'Damaged'),
     ]
 
+    CURRENCY_CHOICES = [
+        ('CDF', 'CDF'),
+        ('USD', 'USD'),
+    ]
+
     name = models.CharField(max_length=200)
     category = models.CharField(max_length=100, blank=True, null=True)
     asset_tag = models.CharField(max_length=60, blank=True, null=True, unique=True)
@@ -471,12 +490,33 @@ class LogisticsItem(models.Model):
     condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, default='good')
     location = models.CharField(max_length=120, blank=True, null=True)
     acquired_date = models.DateField(blank=True, null=True)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     purchase_price = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    purchase_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='CDF')
     supplier = models.CharField(max_length=150, blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        try:
+            qty = int(self.quantity or 0)
+        except (TypeError, ValueError):
+            qty = 0
+
+        if self.unit_price is not None and qty > 0:
+            try:
+                self.purchase_price = (Decimal(str(self.unit_price)) * Decimal(qty)).quantize(Decimal('0.01'))
+            except (InvalidOperation, TypeError, ValueError):
+                pass
+        else:
+            self.purchase_price = None
+
+        super().save(*args, **kwargs)
+        if (not self.asset_tag) and self.pk:
+            self.asset_tag = f"CPD-LOG-{self.pk:06d}"
+            super().save(update_fields=['asset_tag'])
 
 
 class AuditLogEntry(models.Model):

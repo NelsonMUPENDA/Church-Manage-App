@@ -33,6 +33,11 @@ export default function Events() {
   const [departments, setDepartments] = useState([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
 
+  const [durations, setDurations] = useState([]);
+  const [loadingDurations, setLoadingDurations] = useState(false);
+  const [newDurationLabel, setNewDurationLabel] = useState('');
+  const [creatingDuration, setCreatingDuration] = useState(false);
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [posterFile, setPosterFile] = useState(null);
@@ -60,6 +65,18 @@ export default function Events() {
       if (lines.length) return lines.join('\n');
     }
     return fallback;
+  };
+
+  const durationLabel = (code) => {
+    const c = String(code || '').trim();
+    if (!c) return '—';
+    const found = (durations || []).find((d) => String(d?.code) === c);
+    if (found?.label) return found.label;
+    if (c === 'daily') return 'Journalière';
+    if (c === 'weekly') return 'Hebdomadaire';
+    if (c === '21d') return '21 jours';
+    if (c === '40d') return '40 jours';
+    return c;
   };
 
   const eventTypeBadge = (eventType) => {
@@ -106,7 +123,7 @@ export default function Events() {
     if (et === 'training' || et === 'evangelism' || et === 'baptism') {
       return `${date} • ${time}`;
     }
-    return `${date} • ${time} • ${ev?.duration_type || '—'}`;
+    return `${date} • ${time} • ${durationLabel(ev?.duration_type)}`;
   };
 
   const programmeCardLine2 = (ev) => {
@@ -259,6 +276,49 @@ export default function Events() {
     };
     loadDepts();
   }, [isAdmin]);
+
+  useEffect(() => {
+    const loadDurations = async () => {
+      setLoadingDurations(true);
+      try {
+        const res = await api.get('/api/activity-durations/', { params: { is_active: 1 } });
+        const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
+        setDurations(data);
+      } catch {
+        setDurations([]);
+      } finally {
+        setLoadingDurations(false);
+      }
+    };
+    loadDurations();
+  }, []);
+
+  const createDuration = async () => {
+    const label = String(newDurationLabel || '').trim();
+    if (!label) {
+      toast.push({ type: 'error', title: 'Durée', message: 'Renseigne le libellé de la durée.' });
+      return;
+    }
+    setCreatingDuration(true);
+    try {
+      const res = await api.post('/api/activity-durations/', { label, is_active: true });
+      const created = res?.data;
+      setNewDurationLabel('');
+      try {
+        const list = await api.get('/api/activity-durations/', { params: { is_active: 1 } });
+        const data = Array.isArray(list.data) ? list.data : list.data?.results || [];
+        setDurations(data);
+      } catch {}
+      if (created?.code) {
+        setForm((f) => ({ ...f, duration_type: created.code }));
+      }
+      toast.push({ type: 'success', title: 'Durée ajoutée' });
+    } catch (err) {
+      toast.push({ type: 'error', title: 'Erreur', message: formatApiError(err, "Impossible d'ajouter la durée.") });
+    } finally {
+      setCreatingDuration(false);
+    }
+  };
 
   const startCreate = () => {
     setEditingId(null);
@@ -563,12 +623,50 @@ export default function Events() {
 
               <div className="min-w-0">
                 <div className="text-xs font-semibold text-gray-600 mb-1">Durée d'activité</div>
-                <select value={form.duration_type} onChange={(e) => setForm((f) => ({ ...f, duration_type: e.target.value }))} className="cpd-select">
-                  <option value="daily">Journalière</option>
-                  <option value="weekly">Hebdomadaire</option>
-                  <option value="21d">21j</option>
-                  <option value="40d">40j</option>
+                <select
+                  value={form.duration_type}
+                  onChange={(e) => setForm((f) => ({ ...f, duration_type: e.target.value }))}
+                  className="cpd-select"
+                  disabled={loadingDurations}
+                >
+                  {form.duration_type && !(durations || []).some((d) => String(d?.code) === String(form.duration_type)) ? (
+                    <option value={form.duration_type}>{durationLabel(form.duration_type)}</option>
+                  ) : null}
+                  {(durations || []).map((d) => (
+                    <option key={d.id || d.code} value={d.code}>
+                      {d.label || d.code}
+                    </option>
+                  ))}
+                  {!loadingDurations && (!durations || durations.length === 0) ? (
+                    <>
+                      <option value="daily">Journalière</option>
+                      <option value="weekly">Hebdomadaire</option>
+                      <option value="21d">21 jours</option>
+                      <option value="40d">40 jours</option>
+                    </>
+                  ) : null}
                 </select>
+                {isAdmin ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      value={newDurationLabel}
+                      onChange={(e) => setNewDurationLabel(e.target.value)}
+                      className="cpd-input"
+                      placeholder="Ajouter une durée (ex: 3 jours, 2 semaines, 1 mois...)"
+                      disabled={creatingDuration}
+                    />
+                    <motion.button
+                      type="button"
+                      onClick={createDuration}
+                      disabled={creatingDuration}
+                      className="cpd-btn cpd-btn-ghost shrink-0"
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      {creatingDuration ? '…' : 'Ajouter'}
+                    </motion.button>
+                  </div>
+                ) : null}
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-semibold text-gray-600 mb-1">Date</div>
@@ -672,10 +770,19 @@ export default function Events() {
               <div className="text-xs font-semibold text-gray-600 mb-1">Durée</div>
               <select value={durationFilter} onChange={(e) => setDurationFilter(e.target.value)} className="cpd-select">
                 <option value="all">Toutes</option>
-                <option value="daily">Journalière</option>
-                <option value="weekly">Hebdomadaire</option>
-                <option value="21d">21j</option>
-                <option value="40d">40j</option>
+                {(durations || []).map((d) => (
+                  <option key={d.id || d.code} value={d.code}>
+                    {d.label || d.code}
+                  </option>
+                ))}
+                {!loadingDurations && (!durations || durations.length === 0) ? (
+                  <>
+                    <option value="daily">Journalière</option>
+                    <option value="weekly">Hebdomadaire</option>
+                    <option value="21d">21 jours</option>
+                    <option value="40d">40 jours</option>
+                  </>
+                ) : null}
               </select>
             </div>
           </div>
@@ -954,7 +1061,7 @@ export default function Events() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-xl font-black text-white truncate">{previewEvent.title || 'Programme'}</div>
-                      <div className="mt-1 text-sm text-white/85 truncate">{previewEvent.date || '—'} • {String(previewEvent.time || '').slice(0, 5) || '—'} • {previewEvent.duration_type || '—'}</div>
+                      <div className="mt-1 text-sm text-white/85 truncate">{previewEvent.date || '—'} • {String(previewEvent.time || '').slice(0, 5) || '—'} • {durationLabel(previewEvent.duration_type)}</div>
                     </div>
                     <span className={`shrink-0 text-xs font-semibold px-2 py-1 rounded-full ${previewEvent.is_published ? 'bg-emerald-500/20 text-emerald-50 border border-emerald-300/20' : 'bg-white/15 text-white border border-white/15'}`}>
                       {previewEvent.is_published ? 'Publié' : 'Brouillon'}

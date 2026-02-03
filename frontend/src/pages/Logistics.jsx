@@ -20,6 +20,8 @@ export default function Logistics() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const defaultForm = useCallback(() => {
     return {
@@ -31,7 +33,9 @@ export default function Logistics() {
       condition: 'good',
       location: '',
       acquired_date: '',
+      unit_price: '',
       purchase_price: '',
+      purchase_currency: 'CDF',
       supplier: '',
       notes: '',
       is_active: true,
@@ -127,16 +131,25 @@ export default function Logistics() {
 
   const openEdit = (item) => {
     setEditingId(item?.id || null);
+    const q = Number.isFinite(Number(item?.quantity)) ? Number(item.quantity) : 1;
+    const existingUnit = item?.unit_price ?? '';
+    let inferredUnit = existingUnit;
+    if ((inferredUnit === '' || inferredUnit === null || inferredUnit === undefined) && item?.purchase_price != null && q > 0) {
+      const unitCalc = Number(item.purchase_price) / Number(q);
+      inferredUnit = Number.isFinite(unitCalc) ? String(unitCalc) : '';
+    }
     setForm({
       name: item?.name || '',
       category: item?.category || '',
       asset_tag: item?.asset_tag || '',
-      quantity: Number.isFinite(Number(item?.quantity)) ? Number(item.quantity) : 1,
+      quantity: q,
       unit: item?.unit || '',
       condition: item?.condition || 'good',
       location: item?.location || '',
       acquired_date: item?.acquired_date || '',
+      unit_price: inferredUnit ?? '',
       purchase_price: item?.purchase_price ?? '',
+      purchase_currency: (item?.purchase_currency || 'CDF').toUpperCase(),
       supplier: item?.supplier || '',
       notes: item?.notes || '',
       is_active: item?.is_active !== false,
@@ -155,13 +168,13 @@ export default function Logistics() {
     const payload = {
       name: (f.name || '').trim(),
       category: (f.category || '').trim() || null,
-      asset_tag: (f.asset_tag || '').trim() || null,
       quantity: Number(f.quantity),
       unit: (f.unit || '').trim() || null,
       condition: f.condition || 'good',
       location: (f.location || '').trim() || null,
       acquired_date: f.acquired_date || null,
-      purchase_price: f.purchase_price === '' || f.purchase_price === null || f.purchase_price === undefined ? null : Number(f.purchase_price),
+      unit_price: f.unit_price === '' || f.unit_price === null || f.unit_price === undefined ? null : Number(f.unit_price),
+      purchase_currency: (f.purchase_currency || 'CDF').toUpperCase(),
       supplier: (f.supplier || '').trim() || null,
       notes: (f.notes || '').trim() || null,
       is_active: !!f.is_active,
@@ -173,6 +186,15 @@ export default function Logistics() {
 
     return payload;
   };
+
+  const computedTotal = useMemo(() => {
+    const qty = Number(form.quantity);
+    const up = Number(form.unit_price);
+    if (!Number.isFinite(qty) || qty <= 0) return '';
+    if (!Number.isFinite(up) || up < 0) return '';
+    const total = up * qty;
+    return Number.isFinite(total) ? total.toFixed(2) : '';
+  }, [form.quantity, form.unit_price]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -222,8 +244,15 @@ export default function Logistics() {
   };
 
   const remove = async (item) => {
-    const label = item?.asset_tag ? `${item.name} (${item.asset_tag})` : item?.name || `#${item?.id}`;
-    if (!window.confirm(`Supprimer le matériel ${label} ?`)) return;
+    if (!item?.id) return;
+    setConfirmDelete(item);
+  };
+
+  const handleConfirmDelete = async () => {
+    const item = confirmDelete;
+    if (!item?.id) return;
+    setConfirmDelete(null);
+    setDeletingId(item.id);
     try {
       const res = await api.delete(`/api/logistics-items/${item.id}/`);
       if (res?.status === 202) {
@@ -237,6 +266,8 @@ export default function Logistics() {
       await load();
     } catch (err) {
       toast.push({ type: 'error', title: 'Erreur', message: formatApiError(err, 'Impossible de supprimer.') });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -248,6 +279,11 @@ export default function Logistics() {
     if (c === 'damaged') return 'Endommagé';
     return c || '—';
   };
+
+  const unitSuggestions = useMemo(
+    () => ['pièce(s)', 'unité(s)', 'carton(s)', 'lot(s)', 'mètre(s)', 'kg', 'litre(s)', 'chaise(s)', 'table(s)'],
+    []
+  );
 
   return (
     <div className="space-y-6">
@@ -325,19 +361,21 @@ export default function Logistics() {
                 <th className="py-2 pr-3">Catégorie</th>
                 <th className="py-2 pr-3">Code</th>
                 <th className="py-2 pr-3">Qté</th>
+                <th className="py-2 pr-3">Prix</th>
                 <th className="py-2 pr-3">État</th>
                 <th className="py-2 pr-3">Emplacement</th>
+                <th className="py-2 pr-3">Actif</th>
                 <th className="py-2 pr-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-500">Chargement...</td>
+                    <td colSpan={9} className="py-8 text-center text-gray-500">Chargement...</td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-gray-500">Aucun matériel.</td>
+                    <td colSpan={9} className="py-8 text-center text-gray-500">Aucun matériel.</td>
                   </tr>
                 ) : (
                   rows.map((it) => (
@@ -349,11 +387,22 @@ export default function Logistics() {
                       <td className="py-3 pr-3 text-gray-700 dark:text-slate-200">{it.category || '—'}</td>
                       <td className="py-3 pr-3 text-gray-700 dark:text-slate-200">{it.asset_tag || '—'}</td>
                       <td className="py-3 pr-3 text-gray-700 dark:text-slate-200">
-                        {it.quantity}
-                        {it.unit ? ` ${it.unit}` : ''}
+                        <span className="font-semibold">{Number.isFinite(Number(it.quantity)) ? Number(it.quantity) : it.quantity}</span>
+                        <span className="ml-1 text-gray-600 dark:text-slate-300">{it.unit || 'unité(s)'}</span>
+                      </td>
+                      <td className="py-3 pr-3 text-gray-700 dark:text-slate-200">
+                        {it.purchase_price != null && it.purchase_price !== '' ? (
+                          <span className="font-semibold">{Number(it.purchase_price).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        ) : (
+                          '—'
+                        )}
+                        <span className="ml-1 text-gray-600 dark:text-slate-300">{String(it.purchase_currency || 'CDF').toUpperCase()}</span>
                       </td>
                       <td className="py-3 pr-3 text-gray-700 dark:text-slate-200">{conditionLabel(it.condition)}</td>
                       <td className="py-3 pr-3 text-gray-700 dark:text-slate-200">{it.location || '—'}</td>
+                      <td className="py-3 pr-3 text-gray-700 dark:text-slate-200">
+                        {it.is_active ? 'Oui' : 'Non'}
+                      </td>
                       <td className="py-3 pr-0">
                         <div className="flex justify-end gap-2">
                           <button
@@ -430,29 +479,60 @@ export default function Logistics() {
                     onChange={(e) => setForm((f) => ({ ...f, asset_tag: e.target.value }))}
                     className={`mt-1 ${inputClass}`}
                     placeholder="Ex: CPD-LOG-0001"
+                    disabled
                   />
+                  <div className="mt-1 text-xs text-gray-500 dark:text-slate-400">Le code est généré automatiquement.</div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 dark:text-slate-300">Quantité *</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.quantity}
-                    onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-                    className={`mt-1 ${inputClass}`}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 dark:text-slate-300">Unité</label>
-                  <input
-                    value={form.unit}
-                    onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
-                    className={`mt-1 ${inputClass}`}
-                    placeholder="Ex: pièces, cartons, chaises"
-                  />
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-semibold text-gray-600 dark:text-slate-300">Quantité / Prix *</label>
+                  <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-5">
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.quantity}
+                      onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+                      className={`${inputClass}`}
+                      required
+                      placeholder="Quantité"
+                    />
+                    <select
+                      value={form.unit}
+                      onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                      className={`${selectClass}`}
+                    >
+                      <option value="">Unité…</option>
+                      {unitSuggestions.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={form.unit_price}
+                      onChange={(e) => setForm((f) => ({ ...f, unit_price: e.target.value }))}
+                      className={`${inputClass}`}
+                      placeholder="Prix unitaire"
+                    />
+                    <select
+                      value={form.purchase_currency}
+                      onChange={(e) => setForm((f) => ({ ...f, purchase_currency: e.target.value }))}
+                      className={`${selectClass}`}
+                    >
+                      <option value="CDF">CDF</option>
+                      <option value="USD">USD</option>
+                    </select>
+                    <input
+                      value={computedTotal}
+                      readOnly
+                      className={`${inputClass}`}
+                      placeholder="Prix total"
+                    />
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500 dark:text-slate-400">Unités disponibles: {unitSuggestions.join(', ')}.</div>
                 </div>
 
                 <div>
@@ -487,19 +567,6 @@ export default function Logistics() {
                     value={form.acquired_date}
                     onChange={(e) => setForm((f) => ({ ...f, acquired_date: e.target.value }))}
                     className={`mt-1 ${inputClass}`}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 dark:text-slate-300">Prix d'achat</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={form.purchase_price}
-                    onChange={(e) => setForm((f) => ({ ...f, purchase_price: e.target.value }))}
-                    className={`mt-1 ${inputClass}`}
-                    placeholder="0.00"
                   />
                 </div>
 
@@ -551,6 +618,60 @@ export default function Logistics() {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      ) : null}
+
+      {confirmDelete ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setConfirmDelete(null)}
+          />
+          <motion.div
+            className="relative w-full max-w-md cpd-surface p-5"
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.16 }}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50/70 dark:bg-rose-500/10 border border-rose-200/70 dark:border-rose-500/20">
+                <TrashIcon className="h-6 w-6 text-rose-700 dark:text-rose-200" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">Supprimer le matériel</div>
+                <div className="mt-1 text-xs text-gray-600 dark:text-slate-300">Cette action est irréversible.</div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-gray-100 dark:border-white/10 bg-white/60 dark:bg-white/5 p-3">
+              <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">{confirmDelete.name}</div>
+              <div className="mt-1 text-xs text-gray-600 dark:text-slate-300">
+                {confirmDelete.asset_tag ? <span className="font-medium">{confirmDelete.asset_tag}</span> : null}
+                {confirmDelete.category ? <span className="ml-2">• {confirmDelete.category}</span> : null}
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="cpd-btn cpd-btn-outline px-3 py-2"
+                onClick={() => setConfirmDelete(null)}
+                disabled={deletingId === confirmDelete.id}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="cpd-btn px-3 py-2 bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
+                onClick={handleConfirmDelete}
+                disabled={deletingId === confirmDelete.id}
+              >
+                {deletingId === confirmDelete.id ? 'Suppression...' : 'Confirmer'}
+              </button>
+            </div>
           </motion.div>
         </div>
       ) : null}

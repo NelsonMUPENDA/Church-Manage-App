@@ -2,7 +2,7 @@ Django==5.2.10
 djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.0
 django-cors-headers==4.4.0
-psycopg[binary]==3.2.3
+psycopg[binary]==3.2.14
 Pillow==10.4.0
 python-decouple==3.8
 celery==5.3.6
@@ -15,3 +15,4 @@ qrcode==7.4.2
 svgwrite==1.4.3
 reportlab==4.2.0
 python-pptx==0.6.23
+openpyxl==3.1.5

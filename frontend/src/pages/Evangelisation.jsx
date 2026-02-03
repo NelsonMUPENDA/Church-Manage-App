@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   CalendarIcon,
   CheckCircleIcon,
+  ExclamationTriangleIcon,
   PlusIcon,
   TrashIcon,
   UserPlusIcon,
@@ -124,6 +125,9 @@ export default function Evangelisation() {
   const [creatingCandidate, setCreatingCandidate] = useState(false);
   const photoRef = useRef(null);
 
+  const [membersToFollow, setMembersToFollow] = useState([]);
+  const [loadingMembersToFollow, setLoadingMembersToFollow] = useState(false);
+
   const [candidateForm, setCandidateForm] = useState({
     name: '',
     post_name: '',
@@ -156,6 +160,40 @@ export default function Evangelisation() {
     if (activeTab !== 'bapteme') return;
     loadCandidates();
   }, [activeTab, loadCandidates]);
+
+  const loadMembersToFollow = useCallback(async () => {
+    setLoadingMembersToFollow(true);
+    try {
+      const res = await api.get('/api/members/');
+      const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
+      const mapped = data
+        .filter((m) => !m?.baptism_date)
+        .map((m) => {
+          const fullName = [m.user?.first_name, m.post_name, m.user?.last_name].filter(Boolean).join(' ') || m.user?.username || `Membre ${m.id}`;
+          return {
+            id: m.id,
+            memberNumber: m.member_number || '',
+            fullName,
+            phone: m.user?.phone || '',
+            city: m.city || '',
+            commune: m.commune || '',
+            quarter: m.quarter || '',
+          };
+        });
+      mapped.sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', 'fr', { sensitivity: 'base' }));
+      setMembersToFollow(mapped);
+    } catch (err) {
+      setMembersToFollow([]);
+      toast.push({ type: 'error', title: 'Suivi', message: formatApiError(err, 'Impossible de charger les membres.') });
+    } finally {
+      setLoadingMembersToFollow(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (activeTab !== 'bapteme') return;
+    loadMembersToFollow();
+  }, [activeTab, loadMembersToFollow]);
 
   const addCandidate = async () => {
     if (!selectedBaptismEventId) return;
@@ -512,6 +550,47 @@ export default function Evangelisation() {
                       </div>
                     ) : null}
                   </div>
+                </div>
+              </div>
+
+              <div className="mt-4 bg-white/80 backdrop-blur-md border border-white/60 rounded-2xl shadow p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-extrabold text-gray-900">Suivi évangélisation</div>
+                    <div className="text-xs text-gray-600">Membres non baptisés à suivre.</div>
+                  </div>
+                  <div className="shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-100">
+                    <ExclamationTriangleIcon className="h-5 w-5" />
+                    <div className="text-sm font-bold">{loadingMembersToFollow ? '…' : membersToFollow.length}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  {loadingMembersToFollow ? (
+                    <div className="text-sm text-gray-600">Chargement…</div>
+                  ) : membersToFollow.length === 0 ? (
+                    <div className="text-sm text-gray-600">Aucun membre à suivre.</div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {membersToFollow.map((m) => (
+                        <div key={m.id} className="rounded-2xl border border-amber-100 bg-amber-50/40 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-extrabold text-gray-900 truncate">{m.fullName}</div>
+                              <div className="mt-1 text-xs text-gray-700 truncate">N° {m.memberNumber || m.id}</div>
+                              {m.phone ? <div className="mt-1 text-xs text-gray-700 truncate">Tél: {m.phone}</div> : null}
+                              {[m.city, m.commune, m.quarter].filter(Boolean).length ? (
+                                <div className="mt-1 text-xs text-gray-600 truncate">{[m.city, m.commune, m.quarter].filter(Boolean).join(' • ')}</div>
+                              ) : null}
+                            </div>
+                            <div className="shrink-0 p-2 rounded-xl bg-amber-100 text-amber-800 border border-amber-200">
+                              <ExclamationTriangleIcon className="h-5 w-5" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

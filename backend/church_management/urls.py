@@ -11,6 +11,7 @@ from .api import (
     AnnouncementViewSet,
     AnnouncementDeckViewSet,
     AuditLogEntryViewSet,
+    ActivityDurationViewSet,
     AttendanceViewSet,
     ApprovalRequestViewSet,
     BaptismCandidateViewSet,
@@ -43,6 +44,7 @@ router.register(r'families', FamilyViewSet, basename='families')
 router.register(r'home-groups', HomeGroupViewSet, basename='home-groups')
 router.register(r'departments', DepartmentViewSet, basename='departments')
 router.register(r'ministries', MinistryViewSet, basename='ministries')
+router.register(r'activity-durations', ActivityDurationViewSet, basename='activity-durations')
 router.register(r'members', MemberViewSet, basename='members')
 router.register(r'events', EventViewSet, basename='events')
 router.register(r'attendance', AttendanceViewSet, basename='attendance')

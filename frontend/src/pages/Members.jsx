@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowDownTrayIcon, PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, PlusIcon, MagnifyingGlassIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 import { api, API_BASE_URL } from '../services/apiClient';
 import { useAuth } from '../contexts/AuthProvider';
@@ -23,6 +23,29 @@ export default function Members() {
   const [photoPreview, setPhotoPreview] = useState('');
   const [qrSvg, setQrSvg] = useState('');
   const [qrLoading, setQrLoading] = useState(false);
+
+  const DEFAULT_PHONE_CODE = '+243';
+  const PHONE_CODE_OPTIONS = useMemo(
+    () => [
+      { code: '+243', label: 'RDC (+243)' },
+      { code: '+242', label: 'Congo (+242)' },
+      { code: '+250', label: 'Rwanda (+250)' },
+      { code: '+257', label: 'Burundi (+257)' },
+      { code: '+256', label: 'Ouganda (+256)' },
+      { code: '+254', label: 'Kenya (+254)' },
+      { code: '+255', label: 'Tanzanie (+255)' },
+      { code: '+244', label: 'Angola (+244)' },
+      { code: '+260', label: 'Zambie (+260)' },
+      { code: '+27', label: 'Afrique du Sud (+27)' },
+      { code: '+33', label: 'France (+33)' },
+      { code: '+32', label: 'Belgique (+32)' },
+      { code: '+1', label: 'USA/Canada (+1)' },
+    ],
+    []
+  );
+
+  const [phoneCode, setPhoneCode] = useState(DEFAULT_PHONE_CODE);
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   const isAdmin = !!user && (user.is_superuser || user.is_staff || user.role === 'admin' || user.role === 'super_admin');
 
@@ -65,6 +88,20 @@ export default function Members() {
     setSaving(false);
     setPhotoFile(null);
     setPhotoPreview(selected.photo || '');
+
+     const splitPhone = (raw, fallbackCode) => {
+       const s = String(raw || '').trim();
+       if (!s) return { code: fallbackCode, number: '' };
+       if (!s.startsWith('+')) return { code: fallbackCode, number: s };
+       const m = s.match(/^\+(\d{1,4})\s*(.*)$/);
+       if (!m) return { code: fallbackCode, number: s };
+       return { code: `+${m[1]}`, number: String(m[2] || '').trim() };
+     };
+
+     const split = splitPhone(selected.phone, DEFAULT_PHONE_CODE);
+     setPhoneCode(split.code || DEFAULT_PHONE_CODE);
+     setPhoneNumber(split.number || '');
+
     setForm({
       user: {
         first_name: selected.firstName || '',
@@ -80,6 +117,8 @@ export default function Members() {
         nationality: selected.nationality || '',
         marital_status: selected.maritalStatus || '',
         occupation: selected.occupation || '',
+        public_function: selected.publicFunction || '',
+        church_position: selected.churchPosition || '',
         education_level: selected.educationLevel || '',
         father_full_name: selected.fatherFullName || '',
         mother_full_name: selected.motherFullName || '',
@@ -94,6 +133,7 @@ export default function Members() {
         emergency_contact_relation: selected.emergencyContactRelation || '',
         baptism_date: selected.baptismDate || '',
         is_active: selected.status === 'Actif',
+        inactive_reason: selected.inactiveReason || '',
       },
     });
   };
@@ -104,6 +144,10 @@ export default function Members() {
     setSaving(false);
     setPhotoFile(null);
     setPhotoPreview('');
+
+    setPhoneCode(DEFAULT_PHONE_CODE);
+    setPhoneNumber('');
+
     setSelected({
       id: null,
       userId: null,
@@ -118,12 +162,15 @@ export default function Members() {
       address: '',
       photo: '',
       status: 'Actif',
+      inactiveReason: null,
       gender: null,
       birthDate: null,
       placeOfBirth: null,
       nationality: null,
       maritalStatus: null,
       occupation: null,
+      publicFunction: null,
+      churchPosition: null,
       educationLevel: null,
       fatherFullName: null,
       motherFullName: null,
@@ -157,6 +204,8 @@ export default function Members() {
         nationality: '',
         marital_status: '',
         occupation: '',
+        public_function: '',
+        church_position: '',
         education_level: '',
         father_full_name: '',
         mother_full_name: '',
@@ -171,6 +220,7 @@ export default function Members() {
         emergency_contact_relation: '',
         baptism_date: '',
         is_active: true,
+        inactive_reason: '',
       },
     });
   };
@@ -181,6 +231,8 @@ export default function Members() {
     setForm(null);
     setPhotoFile(null);
     setPhotoPreview('');
+    setPhoneCode(DEFAULT_PHONE_CODE);
+    setPhoneNumber('');
   };
 
   const closePanel = () => {
@@ -214,7 +266,9 @@ export default function Members() {
       toast.push({ type: 'error', title: 'Nom requis', message: 'Renseignez le nom.' });
       return;
     }
-    if (!String(form?.user?.phone || '').trim()) {
+
+    const normalizedPhoneNumber = String(phoneNumber || '').replace(/[^0-9]+/g, '').trim();
+    if (!normalizedPhoneNumber) {
       toast.push({ type: 'error', title: 'Téléphone requis', message: 'Renseignez le numéro de téléphone.' });
       return;
     }
@@ -224,6 +278,11 @@ export default function Members() {
     }
     if (!String(form?.member?.nationality || '').trim()) {
       toast.push({ type: 'error', title: 'Nationalité requise', message: 'Sélectionnez la nationalité.' });
+      return;
+    }
+
+    if (form?.member?.is_active === false && !String(form?.member?.inactive_reason || '').trim()) {
+      toast.push({ type: 'error', title: 'Cause requise', message: 'Sélectionnez la cause de l’inactivité.' });
       return;
     }
 
@@ -331,6 +390,14 @@ export default function Members() {
       setSaving(false);
     }
   };
+
+  const inactiveReasonLabel = (v) => {
+    const key = String(v || '').toLowerCase();
+    if (key === 'excommunie' || key === 'excommunié') return 'Excommunié';
+    if (key === 'abandonne' || key === 'abandonné') return 'Abandonné';
+    return v ? String(v) : '—';
+  };
+
   const genderLabel = (g) => {
     if (g === 'M') return 'Masculin';
     if (g === 'F') return 'Féminin';
@@ -359,7 +426,7 @@ export default function Members() {
     return out;
   }, []);
 
-  const exportCsv = async () => {
+  const exportExcel = async () => {
     try {
       const params = {};
       if (query.trim()) params.q = query.trim();
@@ -367,13 +434,30 @@ export default function Members() {
       const url = window.URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `members_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `members_${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      toast.push({ type: 'error', title: 'Erreur', message: "Impossible d'exporter le CSV." });
+      toast.push({ type: 'error', title: 'Erreur', message: "Impossible d'exporter le fichier Excel." });
+    }
+  };
+
+  const exportMemberFiche = async () => {
+    if (!selected?.id) return;
+    try {
+      const res = await api.get(`/api/members/${selected.id}/fiche/`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fiche_membre_${selected.memberNumber || selected.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.push({ type: 'error', title: 'Erreur', message: "Impossible d'exporter la fiche du membre." });
     }
   };
 
@@ -399,12 +483,15 @@ export default function Members() {
           phone: m.user?.phone || '',
           photo: photoUrl(p),
           status: m.is_active ? 'Actif' : 'Inactif',
+          inactiveReason: m.inactive_reason || null,
           gender: m.gender || null,
           birthDate: m.birth_date || null,
           placeOfBirth: m.place_of_birth || null,
           nationality: m.nationality || null,
           maritalStatus: m.marital_status || null,
           occupation: m.occupation || null,
+          publicFunction: m.public_function || null,
+          churchPosition: m.church_position || null,
           educationLevel: m.education_level || null,
           fatherFullName: m.father_full_name || null,
           motherFullName: m.mother_full_name || null,
@@ -541,13 +628,13 @@ export default function Members() {
           {isAdmin ? (
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-end">
               <motion.button
-                onClick={exportCsv}
+                onClick={exportExcel}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white/80 border border-white/60 text-gray-900 shadow hover:shadow-lg"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.98 }}
               >
                 <ArrowDownTrayIcon className="h-5 w-5" />
-                Exporter CSV
+                Exporter Excel
               </motion.button>
               <motion.button
                 onClick={startCreate}
@@ -633,7 +720,14 @@ export default function Members() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-sm font-extrabold text-gray-900 truncate">{m.fullName}</div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="text-sm font-extrabold text-gray-900 truncate">{m.fullName}</div>
+                            {!m.baptismDate ? (
+                              <div className="shrink-0 inline-flex items-center px-1.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-100">
+                                <ExclamationTriangleIcon className="h-4 w-4" />
+                              </div>
+                            ) : null}
+                          </div>
                           <div className="mt-0.5 text-xs text-gray-600 truncate">
                             N° {displayMemberNumber(m)}
                             {m.phone ? ` • ${m.phone}` : ''}
@@ -691,6 +785,16 @@ export default function Members() {
                         disabled={saving}
                       >
                         {creatingMember ? 'Annuler' : 'Retour'}
+                      </button>
+                    ) : null}
+                    {isAdmin && !editing && !creatingMember ? (
+                      <button
+                        type="button"
+                        className="px-3 py-2 rounded-xl bg-white text-gray-900 border border-gray-200 hover:bg-gray-50"
+                        onClick={exportMemberFiche}
+                        disabled={saving}
+                      >
+                        Exporter fiche
                       </button>
                     ) : null}
                     {isAdmin && !editing ? (
@@ -825,12 +929,36 @@ export default function Members() {
                   <div className="rounded-2xl border border-gray-200 bg-white p-4">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500">Téléphone</div>
                     {editing ? (
-                      <input
-                        value={form?.user?.phone ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, user: { ...f.user, phone: e.target.value } }))}
-                        required
-                        className={`mt-1 ${inputClass}`}
-                      />
+                      <div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <select
+                          value={phoneCode}
+                          onChange={(e) => {
+                            const nextCode = e.target.value;
+                            setPhoneCode(nextCode);
+                            const combined = `${nextCode}${String(phoneNumber || '').trim() ? ` ${String(phoneNumber || '').trim()}` : ''}`.trim();
+                            setForm((f) => ({ ...f, user: { ...f.user, phone: combined } }));
+                          }}
+                          className={selectClass}
+                        >
+                          {PHONE_CODE_OPTIONS.map((opt) => (
+                            <option key={opt.code} value={opt.code}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          value={phoneNumber}
+                          onChange={(e) => {
+                            const nextNumber = e.target.value;
+                            setPhoneNumber(nextNumber);
+                            const combined = `${String(phoneCode || DEFAULT_PHONE_CODE)}${String(nextNumber || '').trim() ? ` ${String(nextNumber || '').trim()}` : ''}`.trim();
+                            setForm((f) => ({ ...f, user: { ...f.user, phone: combined } }));
+                          }}
+                          required
+                          placeholder="Numéro"
+                          className={`sm:col-span-2 ${inputClass}`}
+                        />
+                      </div>
                     ) : (
                       <div className="text-base font-semibold text-gray-900">{safe(selected.phone)}</div>
                     )}
@@ -859,7 +987,6 @@ export default function Members() {
                         <option value="">—</option>
                         <option value="M">Masculin</option>
                         <option value="F">Féminin</option>
-                        <option value="O">Autre</option>
                       </select>
                     ) : (
                       <div className="text-base font-semibold text-gray-900">{genderLabel(selected.gender)}</div>
@@ -935,6 +1062,30 @@ export default function Members() {
                       />
                     ) : (
                       <div className="text-base font-semibold text-gray-900">{safe(selected.occupation)}</div>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Fonction publique</div>
+                    {editing ? (
+                      <input
+                        value={form?.member?.public_function ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, public_function: e.target.value } }))}
+                        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2"
+                      />
+                    ) : (
+                      <div className="text-base font-semibold text-gray-900">{safe(selected.publicFunction)}</div>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Poste à l’église</div>
+                    {editing ? (
+                      <input
+                        value={form?.member?.church_position ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, church_position: e.target.value } }))}
+                        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2"
+                      />
+                    ) : (
+                      <div className="text-base font-semibold text-gray-900">{safe(selected.churchPosition)}</div>
                     )}
                   </div>
                   <div className="rounded-2xl border border-gray-200 bg-white p-4">
@@ -1084,16 +1235,46 @@ export default function Members() {
                   <div className="rounded-2xl border border-gray-200 bg-white p-4">
                     <div className="text-[10px] uppercase tracking-wider text-gray-500">Statut du membre</div>
                     {editing ? (
-                      <label className="mt-2 inline-flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={!!form?.member?.is_active}
-                          onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, is_active: e.target.checked } }))}
-                        />
-                        Actif
-                      </label>
+                      <>
+                        <label className="mt-2 inline-flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={!!form?.member?.is_active}
+                            onChange={(e) => {
+                              const checked = !!e.target.checked;
+                              setForm((f) => ({
+                                ...f,
+                                member: {
+                                  ...f.member,
+                                  is_active: checked,
+                                  inactive_reason: checked ? null : (f?.member?.inactive_reason ?? ''),
+                                },
+                              }));
+                            }}
+                          />
+                          Actif
+                        </label>
+
+                        {!form?.member?.is_active ? (
+                          <div className="mt-3">
+                            <div className="text-[10px] uppercase tracking-wider text-gray-500">Cause</div>
+                            <select
+                              value={form?.member?.inactive_reason ?? ''}
+                              onChange={(e) => setForm((f) => ({ ...f, member: { ...f.member, inactive_reason: e.target.value } }))}
+                              className={`mt-1 ${selectClass}`}
+                            >
+                              <option value="">Sélectionner…</option>
+                              <option value="excommunie">Excommunié</option>
+                              <option value="abandonne">Abandonné</option>
+                            </select>
+                          </div>
+                        ) : null}
+                      </>
                     ) : (
-                      <div className="text-base font-semibold text-gray-900">{selected.status}</div>
+                      <div className="text-base font-semibold text-gray-900">
+                        {selected.status}
+                        {selected.status === 'Inactif' && selected.inactiveReason ? ` (${inactiveReasonLabel(selected.inactiveReason)})` : ''}
+                      </div>
                     )}
                   </div>
                 </div>

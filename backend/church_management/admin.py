@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, Member, Family, HomeGroup, Department, Ministry, Event, Attendance, FinancialCategory, FinancialTransaction, Announcement, AnnouncementDeck, AnnouncementDeckItem, Document, Notification, AuditLogEntry
+from .models import User, Member, Family, HomeGroup, Department, Ministry, ActivityDuration, Event, Attendance, FinancialCategory, FinancialTransaction, Announcement, AnnouncementDeck, AnnouncementDeckItem, Document, Notification, AuditLogEntry
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -33,6 +33,13 @@ class DepartmentAdmin(admin.ModelAdmin):
 class MinistryAdmin(admin.ModelAdmin):
     list_display = ['name', 'leader', 'created_at']
     search_fields = ['name', 'leader__user__username']
+
+
+@admin.register(ActivityDuration)
+class ActivityDurationAdmin(admin.ModelAdmin):
+    list_display = ['code', 'label', 'sort_order', 'is_active', 'created_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['code', 'label']
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):

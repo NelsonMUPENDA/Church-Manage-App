@@ -33,6 +33,7 @@ from .models import (
     HomeGroup,
     Member,
     Ministry,
+    ActivityDuration,
     LogisticsItem,
     Notification,
     ApprovalRequest,
@@ -189,6 +190,44 @@ class MeUpdateSerializer(serializers.Serializer):
         if update_fields:
             user.save(update_fields=update_fields)
         return user
+
+
+class ActivityDurationSerializer(serializers.ModelSerializer):
+    code = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = ActivityDuration
+        fields = '__all__'
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+    def validate(self, attrs):
+        label = str(attrs.get('label') or '').strip()
+        if not label:
+            raise serializers.ValidationError({'label': 'Libellé requis.'})
+        attrs['label'] = label
+
+        if self.instance is not None:
+            code_in = attrs.get('code')
+            if code_in is None or not str(code_in).strip():
+                attrs['code'] = self.instance.code
+                return attrs
+
+        code = str(attrs.get('code') or '').strip()
+        if not code:
+            base = slugify(label) or 'duration'
+            code = base
+            i = 1
+            while ActivityDuration.objects.filter(code=code).exists():
+                i += 1
+                code = f"{base}-{i}"
+
+        qs = ActivityDuration.objects.filter(code=code)
+        if self.instance is not None:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError({'code': 'Code déjà utilisé.'})
+        attrs['code'] = code
+        return attrs
 
 
 class FamilySerializer(serializers.ModelSerializer):
@@ -733,14 +772,39 @@ class LogisticsItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = LogisticsItem
         fields = '__all__'
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'created_at', 'updated_at', 'asset_tag', 'purchase_price')
 
     def validate(self, attrs):
+        if 'asset_tag' in attrs:
+            attrs.pop('asset_tag', None)
+
+        if 'purchase_price' in attrs:
+            attrs.pop('purchase_price', None)
+
         name = attrs.get('name')
         if name is None and self.instance is not None:
             name = getattr(self.instance, 'name', None)
         if not str(name or '').strip():
             raise serializers.ValidationError({'name': 'Le nom du matériel est requis.'})
+
+        currency = attrs.get('purchase_currency')
+        if currency is None and self.instance is not None:
+            currency = getattr(self.instance, 'purchase_currency', None)
+        if currency is not None:
+            currency = str(currency).strip().upper()
+            if currency not in {'CDF', 'USD'}:
+                raise serializers.ValidationError({'purchase_currency': 'Devise invalide. Utilisez CDF ou USD.'})
+            attrs['purchase_currency'] = currency
+
+        unit_price = attrs.get('unit_price')
+        if unit_price is None and self.instance is not None:
+            unit_price = getattr(self.instance, 'unit_price', None)
+        if unit_price is not None:
+            try:
+                if float(unit_price) < 0:
+                    raise serializers.ValidationError({'unit_price': 'Le prix unitaire doit être positif.'})
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({'unit_price': 'Prix unitaire invalide.'})
 
         qty = attrs.get('quantity')
         if qty is None and self.instance is not None:
