@@ -281,7 +281,9 @@ def _apply_approval_request(ar, request):
                 raise PermissionDenied('Objet introuvable.')
             object_id = str(obj.pk)
             object_repr = getattr(obj, 'name', None) or str(obj.pk)
-            obj.delete()
+            if getattr(obj, 'is_active', True):
+                obj.is_active = False
+                obj.save(update_fields=['is_active', 'updated_at'])
             AuditLogEntry.objects.create(
                 actor=request.user,
                 action='delete',
@@ -2639,11 +2641,13 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         format_type = request.query_params.get('format', 'pdf').lower()
         
-        if format_type not in ['pdf', 'csv']:
-            return Response({'error': 'Format must be pdf or csv'}, status=400)
+        if format_type not in ['pdf', 'csv', 'xlsx', 'excel']:
+            return Response({'error': 'Format must be pdf, csv or xlsx'}, status=400)
         
         if format_type == 'pdf':
             return self._attendance_report_pdf(request, event)
+        if format_type in {'xlsx', 'excel'}:
+            return self._attendance_report_xlsx(request, event)
         else:
             return self._attendance_report_csv(request, event)
 
@@ -2842,40 +2846,235 @@ class EventViewSet(viewsets.ModelViewSet):
             response = HttpResponse(pdf_data, content_type='application/pdf')
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
             response['Content-Length'] = len(pdf_data)
-            
+
             logger.info(f"PDF généré avec succès: {filename} ({len(pdf_data)} bytes)")
             return response
-            
+
         except Exception as e:
             logger.error(f"Erreur lors de la génération PDF: {str(e)}", exc_info=True)
-            
-            # En cas d'erreur, générer un PDF minimal avec le message d'erreur
-            try:
-                buf = io.BytesIO()
-                c = canvas.Canvas(buf, pagesize=A4)
-                c.setFont("Helvetica", 12)
-                c.drawString(50, 750, "ERREUR LORS DE LA GÉNÉRATION DU RAPPORT")
-                c.setFont("Helvetica", 10)
-                error_msg = str(e)[:100]  # Limiter la longueur du message d'erreur
-                c.drawString(50, 730, f"Détail: {error_msg}")
-                c.drawString(50, 710, "Veuillez contacter l'administrateur système.")
-                c.save()
-                
-                error_pdf = buf.getvalue()
-                buf.close()
-                
-                filename = f"erreur_rapport_pointage_{event.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                response = HttpResponse(error_pdf, content_type='application/pdf')
-                response['Content-Disposition'] = f'attachment; filename="{filename}"'
-                return response
-                
-            except Exception as fallback_error:
-                # Si même le PDF d'erreur échoue, retourner une erreur HTTP
-                logger.error(f"Erreur critique lors de la génération du PDF d'erreur: {fallback_error}")
-                return Response(
-                    {'error': f'Erreur critique lors de la génération du PDF: {str(e)}'}, 
-                    status=500
-                )
+            return Response(
+                {'error': f"Erreur lors de la génération du rapport: {str(e)}"},
+                status=500,
+            )
+
+    def _attendance_report_xlsx(self, request, event):
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+            from openpyxl.utils import get_column_letter
+            from openpyxl.worksheet.table import Table, TableStyleInfo
+        except ModuleNotFoundError:
+            return Response(
+                {
+                    'detail': "Le module 'openpyxl' n'est pas installé sur le serveur. Installez-le puis relancez le backend.",
+                },
+                status=500,
+            )
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Résumé'
+
+        header_fill = PatternFill('solid', fgColor='1F4E79')
+        header_font = Font(bold=True, color='FFFFFF')
+        section_fill = PatternFill('solid', fgColor='0F766E')
+        section_font = Font(bold=True, color='FFFFFF')
+        thin = Side(style='thin', color='D9D9D9')
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        wrap_left = Alignment(horizontal='left', vertical='top', wrap_text=True)
+        center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+        def add_title(row, text):
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+            c = ws.cell(row=row, column=1, value=text)
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = center
+            for col in range(1, 5):
+                ws.cell(row=row, column=col).border = border
+            ws.row_dimensions[row].height = 26
+
+        def add_section(row, text):
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+            c = ws.cell(row=row, column=1, value=text)
+            c.fill = section_fill
+            c.font = section_font
+            c.alignment = center
+            for col in range(1, 5):
+                ws.cell(row=row, column=col).border = border
+            ws.row_dimensions[row].height = 20
+
+        def add_kv(row, key, value):
+            ws.cell(row=row, column=1, value=str(key or '')).font = Font(bold=True)
+            ws.cell(row=row, column=2, value=value)
+            ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+            for col in range(1, 5):
+                c = ws.cell(row=row, column=col)
+                c.border = border
+                c.alignment = wrap_left
+            return row + 1
+
+        r = 1
+        add_title(r, 'RAPPORT DE POINTAGE')
+        r += 2
+
+        r = add_kv(r, 'Événement', getattr(event, 'title', None) or '—')
+        r = add_kv(r, 'Date', getattr(event, 'date', None))
+        r = add_kv(r, 'Heure', getattr(event, 'time', None))
+        r = add_kv(r, 'Lieu', getattr(event, 'location', None) or '—')
+
+        # Formats date/heure (col B)
+        ws.cell(row=r - 3, column=2).number_format = 'dd/mm/yyyy'
+        ws.cell(row=r - 2, column=2).number_format = 'hh:mm'
+
+        r += 1
+        add_section(r, 'PARTICIPANTS')
+        r += 1
+
+        ws.append(['Catégorie', 'Nombre', '', ''])
+        for cidx in range(1, 5):
+            c = ws.cell(row=r, column=cidx)
+            c.font = Font(bold=True)
+            c.alignment = center
+            c.border = border
+        r += 1
+
+        attendance_agg = EventAttendanceAggregate.objects.filter(event=event).first()
+        male_adults = (attendance_agg.male_adults or 0) if attendance_agg else 0
+        female_adults = (attendance_agg.female_adults or 0) if attendance_agg else 0
+        male_children = (attendance_agg.male_children or 0) if attendance_agg else 0
+        female_children = (attendance_agg.female_children or 0) if attendance_agg else 0
+        total_participants = male_adults + female_adults + male_children + female_children
+
+        participant_rows = [
+            ('Total participants', total_participants),
+            ('Hommes adultes', male_adults),
+            ('Femmes adultes', female_adults),
+            ('Garçons', male_children),
+            ('Filles', female_children),
+        ]
+        start_participants = r
+        for label, val in participant_rows:
+            ws.append([label, int(val or 0), '', ''])
+            for cidx in range(1, 5):
+                cell = ws.cell(row=r, column=cidx)
+                cell.border = border
+                cell.alignment = wrap_left if cidx == 1 else center
+            r += 1
+        end_participants = r - 1
+
+        # Make it a table for better Excel formatting
+        part_ref = f"A{start_participants - 1}:B{end_participants}"
+        table = Table(displayName='ParticipantsTable', ref=part_ref)
+        table.tableStyleInfo = TableStyleInfo(name='TableStyleMedium9', showRowStripes=True)
+        ws.add_table(table)
+
+        r += 1
+        add_section(r, 'VISITEURS')
+        r += 1
+
+        ws.append(['Catégorie', 'Nombre', '', ''])
+        for cidx in range(1, 5):
+            c = ws.cell(row=r, column=cidx)
+            c.font = Font(bold=True)
+            c.alignment = center
+            c.border = border
+        r += 1
+
+        visitor_agg = EventVisitorAggregate.objects.filter(event=event).first()
+        male_visitors = (visitor_agg.male_visitors or 0) if visitor_agg else 0
+        female_visitors = (visitor_agg.female_visitors or 0) if visitor_agg else 0
+        total_visitors = male_visitors + female_visitors
+        visitor_rows = [
+            ('Total visiteurs', total_visitors),
+            ('Hommes visiteurs', male_visitors),
+            ('Femmes visiteuses', female_visitors),
+        ]
+        start_visitors = r
+        for label, val in visitor_rows:
+            ws.append([label, int(val or 0), '', ''])
+            for cidx in range(1, 5):
+                cell = ws.cell(row=r, column=cidx)
+                cell.border = border
+                cell.alignment = wrap_left if cidx == 1 else center
+            r += 1
+        end_visitors = r - 1
+
+        vis_ref = f"A{start_visitors - 1}:B{end_visitors}"
+        vtable = Table(displayName='VisitorsTable', ref=vis_ref)
+        vtable.tableStyleInfo = TableStyleInfo(name='TableStyleMedium9', showRowStripes=True)
+        ws.add_table(vtable)
+
+        # Column widths
+        ws.column_dimensions['A'].width = 28
+        ws.column_dimensions['B'].width = 14
+        ws.column_dimensions['C'].width = 2
+        ws.column_dimensions['D'].width = 38
+
+        ws.freeze_panes = 'A3'
+        ws.sheet_view.showGridLines = False
+
+        # Second sheet: presence list
+        ws2 = wb.create_sheet('Présences')
+        headers2 = ['Prénom', 'Postnom', 'Nom', 'Téléphone']
+        ws2.append(headers2)
+        ws2.row_dimensions[1].height = 24
+        for col_idx, _ in enumerate(headers2, start=1):
+            c = ws2.cell(row=1, column=col_idx)
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = center
+            c.border = border
+
+        attendances = Attendance.objects.filter(event=event, attended=True).select_related('member__user')
+        for attendance in attendances:
+            member = attendance.member
+            u = member.user if member else None
+            ws2.append([
+                getattr(u, 'first_name', '') if u else '',
+                getattr(member, 'post_name', '') if member else '',
+                getattr(u, 'last_name', '') if u else '',
+                getattr(u, 'phone', '') if u else '',
+            ])
+
+        last_row2 = ws2.max_row
+        last_col2 = ws2.max_column
+        for row in ws2.iter_rows(min_row=2, max_row=last_row2, min_col=1, max_col=last_col2):
+            for cell in row:
+                cell.alignment = wrap_left
+                cell.border = border
+
+        ws2.freeze_panes = 'A2'
+        ws2.sheet_view.showGridLines = False
+
+        if last_row2 >= 2:
+            table_ref2 = f"A1:{get_column_letter(last_col2)}{last_row2}"
+            t2 = Table(displayName='AttendanceList', ref=table_ref2)
+            t2.tableStyleInfo = TableStyleInfo(name='TableStyleMedium9', showRowStripes=True)
+            ws2.add_table(t2)
+
+        for col_idx in range(1, last_col2 + 1):
+            max_len = 0
+            for cell in ws2[get_column_letter(col_idx)]:
+                v = cell.value
+                if v is None:
+                    continue
+                s = str(v)
+                if len(s) > max_len:
+                    max_len = len(s)
+            ws2.column_dimensions[get_column_letter(col_idx)].width = min(max(12, max_len + 2), 40)
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        filename = f"rapport_pointage_{event.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response = HttpResponse(
+            out.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
     def _attendance_report_csv(self, request, event):
         import csv
@@ -3380,28 +3579,57 @@ class FinancialTransactionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='export')
     def export(self, request):
-        buf = io.StringIO()
-        w = csv.writer(buf)
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+            from openpyxl.utils import get_column_letter
+            from openpyxl.worksheet.table import Table, TableStyleInfo
+        except ModuleNotFoundError:
+            return Response(
+                {
+                    'detail': "Le module 'openpyxl' n'est pas installé sur le serveur. Installez-le puis relancez le backend.",
+                },
+                status=500,
+            )
 
-        w.writerow([
-            'document_number',
-            'direction',
-            'transaction_type',
-            'amount',
-            'currency',
-            'date',
-            'donor_name',
-            'donor_email',
-            'recipient_name',
-            'recipient_email',
-            'recipient_phone',
-            'payment_method',
-            'reference_number',
-            'description',
-            'cashier_name',
-            'created_by_name',
-            'created_at',
-        ])
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Transactions'
+
+        headers = [
+            'Document',
+            'Sens',
+            'Type',
+            'Montant',
+            'Devise',
+            'Date',
+            'Donateur',
+            'Email donateur',
+            'Bénéficiaire',
+            'Email bénéficiaire',
+            'Téléphone bénéficiaire',
+            'Mode paiement',
+            'Référence',
+            'Description',
+            'Caissier',
+            'Créé par',
+            'Créé le',
+        ]
+        ws.append(headers)
+
+        header_fill = PatternFill('solid', fgColor='7C2D12')
+        header_font = Font(bold=True, color='FFFFFF')
+        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin = Side(style='thin', color='D9D9D9')
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        ws.row_dimensions[1].height = 28
+        for col_idx, _ in enumerate(headers, start=1):
+            c = ws.cell(row=1, column=col_idx)
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = header_alignment
+            c.border = border
 
         qs = self.get_queryset().select_related('cashier', 'created_by')
         for tx in qs:
@@ -3412,13 +3640,20 @@ class FinancialTransactionViewSet(viewsets.ModelViewSet):
             if tx.created_by:
                 created_by_name = (f"{tx.created_by.first_name} {tx.created_by.last_name}").strip() or tx.created_by.username
 
-            w.writerow([
+            created_at = getattr(tx, 'created_at', None)
+            if created_at:
+                try:
+                    created_at = timezone.localtime(created_at).replace(tzinfo=None)
+                except Exception:
+                    created_at = None
+
+            ws.append([
                 tx.document_number or tx.receipt_code or '',
                 tx.direction or '',
                 tx.transaction_type or '',
-                str(tx.amount) if tx.amount is not None else '',
-                tx.currency or '',
-                tx.date.isoformat() if getattr(tx, 'date', None) else '',
+                float(tx.amount) if tx.amount is not None else None,
+                (tx.currency or '').upper(),
+                getattr(tx, 'date', None),
                 tx.donor_name or '',
                 tx.donor_email or '',
                 tx.recipient_name or '',
@@ -3429,14 +3664,70 @@ class FinancialTransactionViewSet(viewsets.ModelViewSet):
                 tx.description or '',
                 cashier_name or '',
                 created_by_name or '',
-                tx.created_at.isoformat() if getattr(tx, 'created_at', None) else '',
+                created_at,
             ])
 
-        content = buf.getvalue()
-        buf.close()
+        last_row = ws.max_row
+        last_col = ws.max_column
 
-        filename = f"financial_transactions_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        resp = HttpResponse(content, content_type='text/csv; charset=utf-8')
+        body_alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+        money_alignment = Alignment(horizontal='right', vertical='top')
+
+        for row in ws.iter_rows(min_row=2, max_row=last_row, min_col=1, max_col=last_col):
+            for cell in row:
+                cell.alignment = body_alignment
+                cell.border = border
+
+        for r in range(2, last_row + 1):
+            ws.cell(row=r, column=4).number_format = '#,##0.00'
+            ws.cell(row=r, column=4).alignment = money_alignment
+            ws.cell(row=r, column=6).number_format = 'dd/mm/yyyy'
+            ws.cell(row=r, column=17).number_format = 'dd/mm/yyyy hh:mm'
+
+        ws.freeze_panes = 'A2'
+
+        if last_row >= 2:
+            table_ref = f"A1:{get_column_letter(last_col)}{last_row}"
+            table = Table(displayName='FinancialTransactionsTable', ref=table_ref)
+            style = TableStyleInfo(
+                name='TableStyleMedium9',
+                showFirstColumn=False,
+                showLastColumn=False,
+                showRowStripes=True,
+                showColumnStripes=False,
+            )
+            table.tableStyleInfo = style
+            ws.add_table(table)
+
+        for col_idx in range(1, last_col + 1):
+            max_len = 0
+            for cell in ws[get_column_letter(col_idx)]:
+                v = cell.value
+                if v is None:
+                    continue
+                if hasattr(v, 'strftime'):
+                    s = v.strftime('%d/%m/%Y')
+                else:
+                    s = str(v)
+                if len(s) > max_len:
+                    max_len = len(s)
+            ws.column_dimensions[get_column_letter(col_idx)].width = min(max(10, max_len + 2), 48)
+
+        ws.sheet_view.showGridLines = False
+        ws.print_title_rows = '1:1'
+        ws.page_setup.orientation = 'landscape'
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        filename = f"financial_transactions_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        resp = HttpResponse(
+            out.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
         return resp
 
@@ -5311,7 +5602,22 @@ class LogisticsItemViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         if _is_admin_user(request.user):
-            return super().destroy(request, *args, **kwargs)
+            obj = self.get_object()
+            object_id = str(obj.pk)
+            object_repr = getattr(obj, 'name', None) or str(obj.pk)
+            if getattr(obj, 'is_active', True):
+                obj.is_active = False
+                obj.save(update_fields=['is_active', 'updated_at'])
+            AuditLogEntry.objects.create(
+                actor=request.user,
+                action='delete',
+                model='LogisticsItem',
+                object_id=object_id,
+                object_repr=object_repr,
+                ip_address=_client_ip(request),
+                payload=None,
+            )
+            return Response(status=204)
         obj = self.get_object()
         ar = _create_approval_request(
             request,

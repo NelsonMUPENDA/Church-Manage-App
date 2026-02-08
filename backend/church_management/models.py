@@ -306,9 +306,11 @@ class EvangelismActivity(models.Model):
     ACTIVITY_TYPE_CHOICES = [
         ('field', 'Descente sur terrain'),
         ('prayer', 'Réunion de prière'),
+        ('other', 'Autre'),
     ]
     title = models.CharField(max_length=200)
     activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES, default='field')
+    custom_activity_type = models.CharField(max_length=120, blank=True, null=True)
     date = models.DateField()
     time = models.TimeField()
     location = models.CharField(max_length=200)

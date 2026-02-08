@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ClipboardDocumentCheckIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { ClipboardDocumentCheckIcon, Cog6ToothIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthProvider';
 import Pointage from './Pointage';
 import Logistics from './Logistics';
+import Finances from './Finances';
 
 const TAB_ITEMS = [
   { key: 'pointage', label: 'Pointage', icon: ClipboardDocumentCheckIcon },
   { key: 'logistique', label: 'Logistique', icon: Cog6ToothIcon },
+  { key: 'finance', label: 'Finance', icon: CurrencyDollarIcon },
 ];
 
 export default function Diaconat() {
@@ -24,13 +26,15 @@ export default function Diaconat() {
   const isProtocolDeptHead = role === 'department_head' && (departmentName.includes('protoc') || departmentName.includes('protocol'));
   const isSecretary = role === 'secretary' || role === 'protocol_head' || isProtocolDeptHead;
   const isLogisticsHead = (role === 'logistics_head' || (role === 'department_head' && (departmentName.includes('logist') || departmentName.includes('logistique')))) && !isProtocolDeptHead;
+  const isTreasurer = role === 'treasurer' || role === 'financial_head';
 
   const allowedTabs = useMemo(() => {
     if (isAdmin) return TAB_ITEMS;
     if (isSecretary) return TAB_ITEMS.filter((t) => t.key === 'pointage');
     if (isLogisticsHead) return TAB_ITEMS.filter((t) => t.key === 'logistique');
+    if (isTreasurer) return TAB_ITEMS.filter((t) => t.key === 'finance');
     return [];
-  }, [isAdmin, isSecretary, isLogisticsHead]);
+  }, [isAdmin, isSecretary, isLogisticsHead, isTreasurer]);
 
   const activeTab = useMemo(() => {
     if (!allowedTabs.length) return '';
@@ -99,7 +103,7 @@ export default function Diaconat() {
             >
               <Pointage />
             </motion.div>
-          ) : (
+          ) : activeTab === 'logistique' ? (
             <motion.div
               key="tab-logistique"
               className="h-full min-h-0"
@@ -109,6 +113,17 @@ export default function Diaconat() {
               transition={{ duration: 0.18 }}
             >
               <Logistics />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="tab-finance"
+              className="h-full min-h-0"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+            >
+              <Finances />
             </motion.div>
           )}
         </AnimatePresence>

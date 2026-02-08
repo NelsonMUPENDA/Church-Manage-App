@@ -249,10 +249,33 @@ export default function Evangelisation() {
   const [evActForm, setEvActForm] = useState(() => ({
     title: '',
     activity_type: 'field',
+    custom_activity_type: '',
     date: new Date().toISOString().slice(0, 10),
     time: '09:00',
     location: '',
+    moderator: '',
   }));
+
+  const customEvActTypes = useMemo(() => {
+    const set = new Set();
+    (evActs || []).forEach((row) => {
+      if (row?.activity_type !== 'other') return;
+      const label = String(row?.custom_activity_type || '').trim();
+      if (!label) return;
+      set.add(label);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+  }, [evActs]);
+
+  const handleEvActTypeChange = (value) => {
+    const raw = String(value || '');
+    if (raw.startsWith('other::')) {
+      const label = raw.slice('other::'.length);
+      setEvActForm((f) => ({ ...f, activity_type: 'other', custom_activity_type: label }));
+      return;
+    }
+    setEvActForm((f) => ({ ...f, activity_type: raw, custom_activity_type: raw === 'other' ? f.custom_activity_type : '' }));
+  };
 
   const loadEvActs = useCallback(async () => {
     setLoadingEvActs(true);
@@ -278,14 +301,20 @@ export default function Evangelisation() {
       toast.push({ type: 'error', title: 'Titre requis', message: "Renseigne le titre de l'activité." });
       return;
     }
+    if (evActForm.activity_type === 'other' && !String(evActForm.custom_activity_type || '').trim()) {
+      toast.push({ type: 'error', title: 'Champ requis', message: "Renseigne le type d'activité." });
+      return;
+    }
     setCreatingEvAct(true);
     try {
       const res = await api.post('/api/evangelism-activities/', {
         title: evActForm.title,
         activity_type: evActForm.activity_type,
+        custom_activity_type: evActForm.activity_type === 'other' ? evActForm.custom_activity_type : '',
         date: evActForm.date,
         time: evActForm.time,
         location: evActForm.location,
+        moderator: evActForm.moderator,
       });
       if (res?.status === 202) {
         const approvalId = res?.data?.approval_request_id;
@@ -294,9 +323,11 @@ export default function Evangelisation() {
         setEvActForm({
           title: '',
           activity_type: 'field',
+          custom_activity_type: '',
           date: new Date().toISOString().slice(0, 10),
           time: '09:00',
           location: '',
+          moderator: '',
         });
         return;
       }
@@ -304,9 +335,11 @@ export default function Evangelisation() {
       setEvActForm({
         title: '',
         activity_type: 'field',
+        custom_activity_type: '',
         date: new Date().toISOString().slice(0, 10),
         time: '09:00',
         location: '',
+        moderator: '',
       });
       await loadEvActs();
     } catch (err) {
@@ -726,7 +759,7 @@ export default function Evangelisation() {
                   </motion.button>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 min-w-0">
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-3 min-w-0">
                   <input
                     value={evActForm.title}
                     onChange={(e) => setEvActForm((f) => ({ ...f, title: e.target.value }))}
@@ -741,12 +774,27 @@ export default function Evangelisation() {
                   />
                   <select
                     value={evActForm.activity_type}
-                    onChange={(e) => setEvActForm((f) => ({ ...f, activity_type: e.target.value }))}
+                    onChange={(e) => handleEvActTypeChange(e.target.value)}
                     className="w-full min-w-0 rounded-xl border border-gray-200 bg-white/80 px-3 py-2"
                   >
                     <option value="field">Descente sur terrain</option>
                     <option value="prayer">Réunion de prière</option>
+                    <option value="other">Autre…</option>
+                    {customEvActTypes.length ? <option value="" disabled>──────────</option> : null}
+                    {customEvActTypes.map((label) => (
+                      <option key={label} value={`other::${label}`}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
+                  {evActForm.activity_type === 'other' ? (
+                    <input
+                      value={evActForm.custom_activity_type}
+                      onChange={(e) => setEvActForm((f) => ({ ...f, custom_activity_type: e.target.value }))}
+                      className="w-full min-w-0 rounded-xl border border-gray-200 bg-white/80 px-3 py-2"
+                      placeholder="Nouvelle activité"
+                    />
+                  ) : null}
                   <input
                     type="date"
                     value={evActForm.date}
@@ -781,7 +829,13 @@ export default function Evangelisation() {
                           <div className="min-w-0">
                             <div className="text-sm font-extrabold text-gray-900 dark:text-white truncate">{row.title}</div>
                             <div className="mt-1 text-xs text-gray-600 dark:text-slate-300">{row.date} • {String(row.time || '').slice(0, 5)} • {row.location}</div>
-                            <div className="mt-1 text-xs text-gray-500 dark:text-slate-400">{row.activity_type === 'prayer' ? 'Réunion de prière' : 'Descente sur terrain'}</div>
+                            <div className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                              {row.activity_type === 'other'
+                                ? (row.custom_activity_type || 'Autre')
+                                : row.activity_type === 'prayer'
+                                  ? 'Réunion de prière'
+                                  : 'Descente sur terrain'}
+                            </div>
                           </div>
                           <motion.button
                             type="button"

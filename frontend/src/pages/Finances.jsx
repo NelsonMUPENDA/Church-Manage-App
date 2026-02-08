@@ -120,6 +120,7 @@ export default function Finances() {
   );
 
   const defaultExpenseForm = () => ({
+    link_to_event: false,
     event: '',
     amount: '',
     currency: '',
@@ -288,7 +289,7 @@ export default function Finances() {
     }
   };
 
-  const exportCsv = async () => {
+  const exportExcel = async () => {
     try {
       const res = await api.get('/api/financial-transactions/export/', {
         params: buildQueryParams({ includePage: false }),
@@ -297,13 +298,13 @@ export default function Finances() {
       const url = window.URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `financial_transactions_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `financial_transactions_${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      toast.push({ type: 'error', title: 'Erreur', message: "Impossible d'exporter le CSV." });
+      toast.push({ type: 'error', title: 'Erreur', message: "Impossible d'exporter le fichier Excel." });
     }
   };
 
@@ -340,6 +341,7 @@ export default function Finances() {
     } else {
       setActiveForm('out');
       setExpenseForm({
+        link_to_event: !!tx.event,
         event: tx.event ? String(tx.event) : '',
         amount: String(tx.amount ?? ''),
         currency: (tx.currency || '').toUpperCase(),
@@ -499,9 +501,11 @@ export default function Finances() {
 
   const submitExpense = async (e) => {
     e.preventDefault();
-    if (!editingTx?.id && String(expenseForm.event || '').trim()) {
-      toast.push({ type: 'error', title: 'Sortie hors activité', message: "Pour une activité, on enregistre les offrandes/dîmes/autres. Les sorties s'enregistrent hors activité." });
-      return;
+    if (!expenseForm.link_to_event) {
+      // keep payload consistent
+      if (String(expenseForm.event || '').trim()) {
+        setExpenseForm((f) => ({ ...f, event: '' }));
+      }
     }
 
     if (!String(expenseForm.currency || '').trim()) {
@@ -540,7 +544,7 @@ export default function Finances() {
       if (editingTx?.id && editingTx.direction === 'out' && !expenseProof) {
         const res = await api.patch(`/api/financial-transactions/${editingTx.id}/`, {
           direction: 'out',
-          event: eventValue,
+          event: expenseForm.link_to_event ? eventValue : null,
           amount,
           currency: String((expenseForm.currency || 'CDF').toUpperCase()),
           transaction_type: String(expenseForm.transaction_type || 'functioning'),
@@ -563,7 +567,7 @@ export default function Finances() {
       } else {
         const fd = new FormData();
         fd.append('direction', 'out');
-        if (expenseForm.event) fd.append('event', String(expenseForm.event));
+        if (expenseForm.link_to_event && expenseForm.event) fd.append('event', String(expenseForm.event));
         fd.append('amount', String(amount));
         fd.append('currency', String((expenseForm.currency || 'CDF').toUpperCase()));
         fd.append('transaction_type', String(expenseForm.transaction_type || 'functioning'));
@@ -889,8 +893,26 @@ export default function Finances() {
         ) : (
           <form onSubmit={submitExpense} className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <div className="lg:col-span-3 min-w-0">
-              <div className="text-xs font-semibold text-gray-600 mb-1">Activité / Événement</div>
-              <select value={expenseForm.event} onChange={(e) => setExpenseForm((f) => ({ ...f, event: e.target.value }))} className="cpd-select" disabled={loadingEvents}>
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <div className="text-xs font-semibold text-gray-600">Activité / Événement</div>
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!expenseForm.link_to_event}
+                    onChange={(e) => {
+                      const checked = !!e.target.checked;
+                      setExpenseForm((f) => ({ ...f, link_to_event: checked, event: checked ? f.event : '' }));
+                    }}
+                  />
+                  Lier la sortie à une activité
+                </label>
+              </div>
+              <select
+                value={expenseForm.event}
+                onChange={(e) => setExpenseForm((f) => ({ ...f, event: e.target.value }))}
+                className="cpd-select"
+                disabled={loadingEvents || !expenseForm.link_to_event}
+              >
                 <option value="">— Aucune activité —</option>
                 {events.map((ev) => (
                   <option key={ev.id} value={String(ev.id)}>
@@ -1092,12 +1114,12 @@ export default function Finances() {
           <div className="flex items-center gap-2 flex-wrap">
             <motion.button
               type="button"
-              onClick={exportCsv}
+              onClick={exportExcel}
               className="px-2.5 py-1.5 rounded-lg bg-white/80 border border-white/60 text-gray-900 shadow hover:shadow-md text-xs font-semibold"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
             >
-              CSV
+              Excel
             </motion.button>
           </div>
         </div>

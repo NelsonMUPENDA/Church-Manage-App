@@ -383,6 +383,20 @@ class BaptismCandidateSerializer(serializers.ModelSerializer):
 
 
 class EvangelismActivitySerializer(serializers.ModelSerializer):
+    def validate(self, attrs):
+        activity_type = attrs.get('activity_type')
+        if activity_type is None and self.instance is not None:
+            activity_type = getattr(self.instance, 'activity_type', None)
+
+        if activity_type == 'other':
+            custom = attrs.get('custom_activity_type')
+            if custom is None and self.instance is not None:
+                custom = getattr(self.instance, 'custom_activity_type', None)
+            if not str(custom or '').strip():
+                raise serializers.ValidationError({'custom_activity_type': "Renseigne le type d'activité."})
+
+        return super().validate(attrs)
+
     class Meta:
         model = EvangelismActivity
         fields = '__all__'
