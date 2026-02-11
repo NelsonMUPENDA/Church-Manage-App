@@ -517,7 +517,13 @@ class LogisticsItem(models.Model):
 
         super().save(*args, **kwargs)
         if (not self.asset_tag) and self.pk:
-            self.asset_tag = f"CPD-LOG-{self.pk:06d}"
+            name = str(self.name or '').strip()
+            category = str(self.category or '').strip()
+
+            name_initial = (next((ch for ch in name if ch.isalnum()), '') or 'X').upper()
+            category_initial = (next((ch for ch in category if ch.isalnum()), '') or 'X').upper()
+
+            self.asset_tag = f"CDP-LOG-{name_initial}{category_initial}-{self.pk:06d}"
             super().save(update_fields=['asset_tag'])
 
 

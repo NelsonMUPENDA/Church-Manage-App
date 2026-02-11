@@ -8,6 +8,44 @@ import { useToast } from '../components/ToastProvider';
 export default function Reports() {
   const toast = useToast();
 
+  const fmt = (n, digits = 2) => {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return '0';
+    return x.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  };
+
+  const StatCard = ({ title, value, subtitle, tone = 'gray' }) => {
+    const tones = {
+      gray: 'bg-gray-50 text-gray-900',
+      indigo: 'bg-indigo-50 text-indigo-900',
+      amber: 'bg-amber-50 text-amber-900',
+      emerald: 'bg-emerald-50 text-emerald-900',
+      teal: 'bg-teal-50 text-teal-900',
+    };
+    return (
+      <div className={`rounded-2xl border border-white/60 p-4 ${tones[tone] || tones.gray}`}>
+        <div className="text-xs font-semibold text-gray-600">{title}</div>
+        <div className="mt-1 text-2xl font-black">{value}</div>
+        {subtitle ? <div className="mt-2 text-xs text-gray-700 whitespace-pre-wrap">{subtitle}</div> : null}
+      </div>
+    );
+  };
+
+  const Section = ({ title, subtitle, children, defaultOpen = true }) => (
+    <details className="cpd-card p-4" open={defaultOpen}>
+      <summary className="cursor-pointer list-none">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-black text-gray-900 truncate">{title}</div>
+            {subtitle ? <div className="mt-0.5 text-xs text-gray-600">{subtitle}</div> : null}
+          </div>
+          <div className="shrink-0 text-xs font-semibold text-gray-500">Afficher/Masquer</div>
+        </div>
+      </summary>
+      <div className="mt-4">{children}</div>
+    </details>
+  );
+
   const periodLabel = (p) => {
     const t = String(p || '').toLowerCase();
     if (t === 'daily') return 'Journalier';
@@ -397,54 +435,53 @@ export default function Reports() {
         </div>
         )}
 
-        <div className="cpd-card p-6">
-          {reportMode === 'global' ? (
-            loadingGlobalReport ? (
-              <div className="text-gray-600">Chargement du rapport global…</div>
-            ) : !globalReport ? (
-              <div className="text-gray-600">Configure la période et les sections, puis clique sur Générer.</div>
-            ) : (
-              <div className="space-y-5">
-                <div>
-                  <div className="text-xs font-semibold text-gray-600">Rapport global</div>
-                  <div className="text-lg font-bold text-gray-900">{globalReport?.start || '—'} → {globalReport?.end || '—'}</div>
-                  <div className="text-sm text-gray-700">Période: {periodLabel(globalReport?.period)}</div>
-                  <div className="text-sm text-gray-700">Sections: {(globalReport?.sections || []).map(sectionLabel).join(', ') || '—'}</div>
-                </div>
+        {reportMode === 'global' ? (
+          loadingGlobalReport ? (
+            <div className="cpd-card p-6 text-gray-600">Chargement du rapport global…</div>
+          ) : !globalReport ? (
+            <div className="cpd-card p-6 text-gray-600">Configure la période et les sections, puis clique sur Générer.</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="cpd-card p-5">
+                <div className="text-xs font-semibold text-gray-600">Rapport global compilé</div>
+                <div className="mt-1 text-xl font-black text-gray-900">{globalReport?.start || '—'} → {globalReport?.end || '—'}</div>
+                <div className="mt-2 text-sm text-gray-700">Période: <span className="font-semibold">{periodLabel(globalReport?.period)}</span></div>
+                <div className="mt-1 text-sm text-gray-700">Sections: <span className="font-semibold">{(globalReport?.sections || []).map(sectionLabel).join(', ') || '—'}</span></div>
+              </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {globalReport?.data?.programmes ? (
-                    <div className="p-4 rounded-xl bg-indigo-50">
-                      <div className="text-sm text-indigo-700 font-semibold">Programmes</div>
-                      <div className="text-3xl font-bold text-indigo-900">{globalReport.data.programmes.count ?? 0}</div>
-                      <div className="mt-2 text-xs text-indigo-900/80">Publiées: {globalReport.data.programmes.published_count ?? 0}</div>
-                      <div className="mt-1 text-xs text-indigo-900/80">Département: {globalReport.data.programmes.department_events_count ?? 0}</div>
-                    </div>
-                  ) : null}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {globalReport?.data?.programmes ? (
+                  <StatCard
+                    tone="indigo"
+                    title="Programmes"
+                    value={globalReport.data.programmes.count ?? 0}
+                    subtitle={`Publiées: ${globalReport.data.programmes.published_count ?? 0}\nDépartement: ${globalReport.data.programmes.department_events_count ?? 0}`}
+                  />
+                ) : null}
 
-                  {globalReport?.data?.pointage ? (
-                    <div className="p-4 rounded-xl bg-amber-50">
-                      <div className="text-sm text-amber-700 font-semibold">Pointage (statistiques)</div>
-                      <div className="text-3xl font-bold text-amber-900">{globalReport.data.pointage.anonymous_totals?.total ?? 0}</div>
-                      <div className="mt-2 text-xs text-amber-900/80">Présence membres: {globalReport.data.pointage.members_present_count ?? 0}</div>
-                      <div className="mt-1 text-xs text-amber-900/80">Taux: {Number((globalReport.data.pointage.attendance_rate ?? 0) * 100).toFixed(1)}%</div>
-                    </div>
-                  ) : null}
+                {globalReport?.data?.pointage ? (
+                  <StatCard
+                    tone="amber"
+                    title="Pointage (total)"
+                    value={globalReport.data.pointage.anonymous_totals?.total ?? 0}
+                    subtitle={`Présence membres: ${globalReport.data.pointage.members_present_count ?? 0}\nTaux: ${fmt((globalReport.data.pointage.attendance_rate ?? 0) * 100, 1)}%`}
+                  />
+                ) : null}
 
-                  {globalReport?.data?.members ? (
-                    <div className="p-4 rounded-xl bg-emerald-50">
-                      <div className="text-sm text-emerald-700 font-semibold">Membres</div>
-                      <div className="text-3xl font-bold text-emerald-900">{globalReport.data.members.total ?? 0}</div>
-                      <div className="mt-2 text-xs text-emerald-900/80">Nouveaux (période): {globalReport.data.members.new_count ?? 0}</div>
-                      <div className="mt-1 text-xs text-emerald-900/80">Actifs: {globalReport.data.members.active ?? 0} • Inactifs: {globalReport.data.members.inactive ?? 0}</div>
-                    </div>
-                  ) : null}
-                </div>
+                {globalReport?.data?.members ? (
+                  <StatCard
+                    tone="emerald"
+                    title="Membres"
+                    value={globalReport.data.members.total ?? 0}
+                    subtitle={`Nouveaux (période): ${globalReport.data.members.new_count ?? 0}\nActifs: ${globalReport.data.members.active ?? 0} • Inactifs: ${globalReport.data.members.inactive ?? 0}`}
+                  />
+                ) : null}
+              </div>
 
-                {globalReport?.data?.finances?.totals && Object.keys(globalReport.data.finances.totals).length ? (
-                  <div className="cpd-card p-4">
-                    <div className="text-sm font-bold text-gray-900">Finances — Synthèse</div>
-                    <div className="mt-3 cpd-table-wrap">
+              {globalReport?.data?.finances?.totals ? (
+                <Section title="Finances" subtitle="Synthèse Entrées / Sorties / Solde" defaultOpen>
+                  {Object.keys(globalReport.data.finances.totals || {}).length ? (
+                    <div className="cpd-table-wrap">
                       <table className="cpd-table min-w-[520px]">
                         <thead>
                           <tr className="text-xs text-gray-600">
@@ -458,154 +495,140 @@ export default function Reports() {
                           {Object.entries(globalReport.data.finances.totals).map(([cur, agg]) => (
                             <tr key={cur} className="hover:bg-gray-50/60">
                               <td className="px-3 py-2 text-sm text-gray-700">{cur}</td>
-                              <td className="px-3 py-2 text-sm text-gray-700">{Number(agg?.in || 0).toFixed(2)}</td>
-                              <td className="px-3 py-2 text-sm text-gray-700">{Number(agg?.out || 0).toFixed(2)}</td>
-                              <td className="px-3 py-2 text-sm font-semibold text-gray-900">{Number(agg?.net || 0).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-sm text-gray-700">{fmt(agg?.in || 0)}</td>
+                              <td className="px-3 py-2 text-sm text-gray-700">{fmt(agg?.out || 0)}</td>
+                              <td className="px-3 py-2 text-sm font-semibold text-gray-900">{fmt(agg?.net || 0)}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                  </div>
-                ) : null}
+                  ) : (
+                    <div className="text-sm text-gray-600">Aucune donnée finance.</div>
+                  )}
+                </Section>
+              ) : null}
 
-                {globalReport?.data?.diaconat || globalReport?.data?.logistics ? (
-                  <div className="cpd-card p-4">
-                    <div className="text-sm font-bold text-gray-900">Diaconat — Vue d'ensemble</div>
-                    <div className="mt-2 text-sm text-gray-700">Articles: <span className="font-semibold">{(globalReport.data.diaconat || globalReport.data.logistics).items_count ?? 0}</span></div>
-                    <div className="mt-1 text-sm text-gray-700">Actifs: <span className="font-semibold">{(globalReport.data.diaconat || globalReport.data.logistics).active_items_count ?? 0}</span></div>
-                    <div className="mt-1 text-sm text-gray-700">Quantité totale: <span className="font-semibold">{Number((globalReport.data.diaconat || globalReport.data.logistics).quantity_total ?? 0).toFixed(0)}</span></div>
+              {globalReport?.data?.diaconat || globalReport?.data?.logistics ? (
+                <Section title="Logistique / Diaconat" subtitle="État des matériels" defaultOpen={false}>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <StatCard tone="teal" title="Articles" value={(globalReport.data.diaconat || globalReport.data.logistics).items_count ?? 0} />
+                    <StatCard tone="teal" title="Actifs" value={(globalReport.data.diaconat || globalReport.data.logistics).active_items_count ?? 0} />
+                    <StatCard tone="teal" title="Quantité totale" value={fmt((globalReport.data.diaconat || globalReport.data.logistics).quantity_total ?? 0, 0)} />
                   </div>
-                ) : null}
+                </Section>
+              ) : null}
 
-                {globalReport?.data?.evangelisation ? (
-                  <div className="p-4 rounded-xl bg-teal-50">
-                    <div className="text-sm text-teal-700 font-semibold">Évangélisation</div>
-                    <div className="mt-2 text-sm text-teal-900">Baptêmes: <span className="font-bold">{globalReport.data.evangelisation.baptisms_count ?? 0}</span></div>
-                    <div className="mt-1 text-sm text-teal-900">Candidats: <span className="font-bold">{globalReport.data.evangelisation.candidates_count ?? 0}</span></div>
-                    <div className="mt-1 text-sm text-teal-900">Activités: <span className="font-bold">{globalReport.data.evangelisation.evangelism_activities_count ?? 0}</span></div>
-                    <div className="mt-1 text-sm text-teal-900">Affermissements: <span className="font-bold">{globalReport.data.evangelisation.training_events_count ?? 0}</span></div>
+              {globalReport?.data?.evangelisation ? (
+                <Section title="Évangélisation" subtitle="Statistiques" defaultOpen={false}>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <StatCard tone="teal" title="Baptêmes" value={globalReport.data.evangelisation.baptisms_count ?? 0} />
+                    <StatCard tone="teal" title="Candidats" value={globalReport.data.evangelisation.candidates_count ?? 0} />
+                    <StatCard tone="teal" title="Activités" value={globalReport.data.evangelisation.evangelism_activities_count ?? 0} />
+                    <StatCard tone="teal" title="Affermissements" value={globalReport.data.evangelisation.training_events_count ?? 0} />
                   </div>
-                ) : null}
-              </div>
-            )
-          ) : loadingReport ? (
-            <div className="text-gray-600">Chargement du rapport…</div>
+                </Section>
+              ) : null}
+            </div>
+          )
+        ) : (
+          loadingReport ? (
+            <div className="cpd-card p-6 text-gray-600">Chargement du rapport…</div>
           ) : !report ? (
-            <div className="text-gray-600">Sélectionne une activité pour afficher son rapport.</div>
+            <div className="cpd-card p-6 text-gray-600">Sélectionne une activité pour afficher son rapport.</div>
           ) : (
-            <div className="space-y-5">
-              <div>
-                <div className="text-xs font-semibold text-gray-600">Programme</div>
-                <div className="text-lg font-bold text-gray-900">{selectedEvent?.title || report?.event?.title || '—'}</div>
-                <div className="text-sm text-gray-700">{report?.event?.date || '—'} • {String(report?.event?.time || '').slice(0, 5) || '—'} • {eventTypeLabel(report?.event?.event_type)}</div>
-                <div className="text-sm text-gray-700">Durée: {durationLabel(report?.event?.duration_type)}</div>
-                <div className="text-sm text-gray-700">Lieu: {report?.event?.location || '—'}</div>
-                {report?.event?.description ? <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">{report.event.description}</div> : null}
+            <div className="space-y-4">
+              <div className="cpd-card p-5">
+                <div className="text-xs font-semibold text-gray-600">Activité</div>
+                <div className="mt-1 text-xl font-black text-gray-900">{selectedEvent?.title || report?.event?.title || '—'}</div>
+                <div className="mt-2 text-sm text-gray-700">
+                  {report?.event?.date || '—'} • {String(report?.event?.time || '').slice(0, 5) || '—'} • {eventTypeLabel(report?.event?.event_type)}
+                </div>
+                <div className="mt-1 text-sm text-gray-700">Durée: <span className="font-semibold">{durationLabel(report?.event?.duration_type)}</span></div>
+                <div className="mt-1 text-sm text-gray-700">Lieu: <span className="font-semibold">{report?.event?.location || '—'}</span></div>
+                {report?.event?.description ? <div className="mt-3 text-sm text-gray-700 whitespace-pre-wrap">{report.event.description}</div> : null}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {showAttendanceAndVisitors && report?.attendance?.anonymous ? (
-                  <div className="p-4 rounded-xl bg-indigo-50">
-                    <div className="text-sm text-indigo-700 font-semibold">Pointage (anonyme)</div>
-                    <div className="text-3xl font-bold text-indigo-900">{anon.total ?? 0}</div>
-                    <div className="mt-2 text-xs text-indigo-900/80">
-                      Hommes adultes: {anon.male_adults ?? 0} • Femmes adultes: {anon.female_adults ?? 0}
-                    </div>
-                    <div className="mt-1 text-xs text-indigo-900/80">
-                      Garçons: {anon.male_children ?? 0} • Filles: {anon.female_children ?? 0}
-                    </div>
-                  </div>
+                  <StatCard
+                    tone="indigo"
+                    title="Pointage (anonyme)"
+                    value={anon.total ?? 0}
+                    subtitle={`Hommes adultes: ${anon.male_adults ?? 0} • Femmes adultes: ${anon.female_adults ?? 0}\nGarçons: ${anon.male_children ?? 0} • Filles: ${anon.female_children ?? 0}`}
+                  />
                 ) : null}
 
                 {showFinance && report?.finance ? (
-                  <div className="p-4 rounded-xl bg-amber-50">
-                    <div className="text-sm text-amber-700 font-semibold">Finances (activité)</div>
-                    <div className="text-xs text-amber-900/80 mt-2">Transactions: {report?.finance?.transaction_count ?? 0}</div>
-                    <div className="mt-3 space-y-1">
-                      {Object.keys(totals).length === 0 ? (
-                        <div className="text-sm font-semibold text-amber-900">Aucune transaction liée</div>
-                      ) : (
-                        Object.entries(totals).map(([cur, t]) => (
-                          <div key={cur} className="text-xs text-amber-900/90">
-                            <span className="font-semibold">{cur}</span>
-                            {' — '}
-                            Entrées: {Number(t?.in || 0).toFixed(2)}
-                            {' • '}
-                            Sorties: {Number(t?.out || 0).toFixed(2)}
-                            {' • '}
-                            Solde: {Number(t?.net || 0).toFixed(2)}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
+                  <StatCard
+                    tone="amber"
+                    title="Finances"
+                    value={report?.finance?.transaction_count ?? 0}
+                    subtitle={
+                      Object.keys(totals).length === 0
+                        ? 'Aucune transaction liée'
+                        : Object.entries(totals)
+                            .map(([cur, t]) => `${cur}: +${fmt(t?.in || 0)} / -${fmt(t?.out || 0)} / solde ${fmt(t?.net || 0)}`)
+                            .join('\n')
+                    }
+                  />
                 ) : null}
 
                 {showAttendanceAndVisitors && dept ? (
-                  <div className="p-4 rounded-xl bg-emerald-50">
-                    <div className="text-sm text-emerald-700 font-semibold">Département</div>
-                    <div className="text-sm font-semibold text-emerald-900 mt-2">{dept?.department_name || '—'}</div>
-                    {dept?.stats ? (
-                      <div className="mt-2 text-xs text-emerald-900/80">
-                        Membres présents: {dept.stats.members_present ?? 0}
-                        {' • '}
-                        Hommes: {dept.stats.men ?? 0}
-                        {' • '}
-                        Femmes: {dept.stats.women ?? 0}
-                        {' • '}
-                        Enfants: {dept.stats.children ?? 0}
-                      </div>
-                    ) : null}
-                  </div>
+                  <StatCard
+                    tone="emerald"
+                    title="Département"
+                    value={dept?.department_name || '—'}
+                    subtitle={
+                      dept?.stats
+                        ? `Membres présents: ${dept.stats.members_present ?? 0}\nHommes: ${dept.stats.men ?? 0} • Femmes: ${dept.stats.women ?? 0} • Enfants: ${dept.stats.children ?? 0}`
+                        : null
+                    }
+                  />
                 ) : null}
               </div>
 
-              {((showAttendanceAndVisitors && (report?.attendance || report?.visitors)) || consumption.length) ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {showAttendanceAndVisitors && report?.visitors ? (
-                    <div className="cpd-card p-4">
-                      <div className="text-sm font-bold text-gray-900">Visiteurs</div>
-                      <div className="mt-2 text-sm text-gray-700">Total: <span className="font-semibold">{visitors.total ?? 0}</span></div>
-                      <div className="mt-1 text-sm text-gray-700">Hommes: <span className="font-semibold">{visitors.male_visitors ?? 0}</span> • Femmes: <span className="font-semibold">{visitors.female_visitors ?? 0}</span></div>
-                    </div>
-                  ) : null}
-
-                  <div className="cpd-card p-4">
-                    <div className="text-sm font-bold text-gray-900">Consommation logistique</div>
-                    {consumption.length === 0 ? (
-                      <div className="mt-2 text-sm text-gray-600">Aucune consommation.</div>
-                    ) : (
-                      <div className="mt-3 cpd-table-wrap">
-                        <table className="cpd-table min-w-[520px]">
-                          <thead>
-                            <tr className="text-xs text-gray-600">
-                              <th className="px-3 py-2 font-semibold">Article</th>
-                              <th className="px-3 py-2 font-semibold">Qté</th>
-                              <th className="px-3 py-2 font-semibold">Unité</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {consumption.map((it) => (
-                              <tr key={`${it.item_id}-${it.item_name}`} className="hover:bg-gray-50/60">
-                                <td className="px-3 py-2 text-sm font-semibold text-gray-900">{it.item_name || '—'}</td>
-                                <td className="px-3 py-2 text-sm text-gray-700">{it.quantity_used ?? 0}</td>
-                                <td className="px-3 py-2 text-sm text-gray-700">{it.item_unit || '—'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+              {showAttendanceAndVisitors && report?.visitors ? (
+                <Section title="Visiteurs" subtitle="Détails" defaultOpen={false}>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <StatCard tone="gray" title="Total" value={visitors.total ?? 0} />
+                    <StatCard tone="gray" title="Hommes" value={visitors.male_visitors ?? 0} />
+                    <StatCard tone="gray" title="Femmes" value={visitors.female_visitors ?? 0} />
                   </div>
-                </div>
+                </Section>
               ) : null}
 
+              <Section title="Consommation logistique" subtitle="Articles consommés pendant l'activité" defaultOpen={false}>
+                {consumption.length === 0 ? (
+                  <div className="text-sm text-gray-600">Aucune consommation.</div>
+                ) : (
+                  <div className="cpd-table-wrap">
+                    <table className="cpd-table min-w-[520px]">
+                      <thead>
+                        <tr className="text-xs text-gray-600">
+                          <th className="px-3 py-2 font-semibold">Article</th>
+                          <th className="px-3 py-2 font-semibold">Qté</th>
+                          <th className="px-3 py-2 font-semibold">Unité</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {consumption.map((it) => (
+                          <tr key={`${it.item_id}-${it.item_name}`} className="hover:bg-gray-50/60">
+                            <td className="px-3 py-2 text-sm font-semibold text-gray-900">{it.item_name || '—'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-700">{it.quantity_used ?? 0}</td>
+                            <td className="px-3 py-2 text-sm text-gray-700">{it.item_unit || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Section>
+
               {baptism ? (
-                <div className="cpd-card p-4">
-                  <div className="text-sm font-bold text-gray-900">Baptême — Candidats ({baptism.candidates_count ?? 0})</div>
+                <Section title={`Baptême — Candidats (${baptism.candidates_count ?? 0})`} subtitle="Liste" defaultOpen={false}>
                   {Array.isArray(baptism.candidates) && baptism.candidates.length ? (
-                    <div className="mt-3 cpd-table-wrap">
+                    <div className="cpd-table-wrap">
                       <table className="cpd-table min-w-[520px]">
                         <thead>
                           <tr className="text-xs text-gray-600">
@@ -626,15 +649,14 @@ export default function Reports() {
                       </table>
                     </div>
                   ) : (
-                    <div className="mt-2 text-sm text-gray-600">Aucun candidat.</div>
+                    <div className="text-sm text-gray-600">Aucun candidat.</div>
                   )}
-                </div>
+                </Section>
               ) : null}
 
               {showFinance && Object.keys(byType || {}).length ? (
-                <div className="cpd-card p-4">
-                  <div className="text-sm font-bold text-gray-900">Synthèse par catégorie (comptabilité)</div>
-                  <div className="mt-3 cpd-table-wrap">
+                <Section title="Finances — Synthèse par catégorie" subtitle="Regroupement comptable" defaultOpen={false}>
+                  <div className="cpd-table-wrap">
                     <table className="cpd-table min-w-[640px]">
                       <thead>
                         <tr className="text-xs text-gray-600">
@@ -651,22 +673,21 @@ export default function Reports() {
                             <tr key={`${cur}-${txType}`} className="hover:bg-gray-50/60">
                               <td className="px-3 py-2 text-sm text-gray-700">{cur}</td>
                               <td className="px-3 py-2 text-sm font-semibold text-gray-900">{txType}</td>
-                              <td className="px-3 py-2 text-sm text-gray-700">{Number(agg?.in || 0).toFixed(2)}</td>
-                              <td className="px-3 py-2 text-sm text-gray-700">{Number(agg?.out || 0).toFixed(2)}</td>
-                              <td className="px-3 py-2 text-sm font-semibold text-gray-900">{Number(agg?.net || 0).toFixed(2)}</td>
+                              <td className="px-3 py-2 text-sm text-gray-700">{fmt(agg?.in || 0)}</td>
+                              <td className="px-3 py-2 text-sm text-gray-700">{fmt(agg?.out || 0)}</td>
+                              <td className="px-3 py-2 text-sm font-semibold text-gray-900">{fmt(agg?.net || 0)}</td>
                             </tr>
                           ))
                         )}
                       </tbody>
                     </table>
                   </div>
-                </div>
+                </Section>
               ) : null}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="cpd-card p-4">
-                  <div className="text-sm font-bold text-gray-900">Intervenants</div>
-                  <div className="mt-2 text-sm text-gray-700 space-y-1">
+                <Section title="Intervenants" subtitle="Modérateur, prédicateur, équipes…" defaultOpen>
+                  <div className="text-sm text-gray-700 space-y-1">
                     {isEvangelisationActivity ? (
                       specialLines(report?.event).length ? (
                         specialLines(report?.event).map((ln) => (
@@ -690,41 +711,44 @@ export default function Reports() {
                       </>
                     )}
                   </div>
-                </div>
+                </Section>
 
-                {showFinance && isBaptismActivity && breakdown.length ? (
-                  <div className="cpd-card p-4">
-                    <div className="text-sm font-bold text-gray-900">Offrandes / détails</div>
-                    <div className="mt-3 cpd-table-wrap">
-                      <table className="cpd-table min-w-[720px]">
-                        <thead>
-                          <tr className="text-xs text-gray-600">
-                            <th className="px-3 py-2 font-semibold">Devise</th>
-                            <th className="px-3 py-2 font-semibold">Catégorie</th>
-                            <th className="px-3 py-2 font-semibold">Description</th>
-                            <th className="px-3 py-2 font-semibold">Sens</th>
-                            <th className="px-3 py-2 font-semibold">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {breakdown.map((b, idx) => (
-                            <tr key={`${b.currency}-${b.direction}-${b.transaction_type}-${b.description}-${idx}`} className="hover:bg-gray-50/60">
-                              <td className="px-3 py-2 text-sm text-gray-700">{b.currency || 'CDF'}</td>
-                              <td className="px-3 py-2 text-sm font-semibold text-gray-900">{b.transaction_type || '—'}</td>
-                              <td className="px-3 py-2 text-sm text-gray-700">{b.description || '—'}</td>
-                              <td className="px-3 py-2 text-sm text-gray-700">{b.direction === 'out' ? 'Sortie' : 'Entrée'}</td>
-                              <td className="px-3 py-2 text-sm font-semibold text-gray-900">{Number(b.total || 0).toFixed(2)}</td>
+                {showFinance && isBaptismActivity ? (
+                  <Section title="Offrandes — Détails" subtitle="Détail des lignes" defaultOpen={false}>
+                    {breakdown.length ? (
+                      <div className="cpd-table-wrap">
+                        <table className="cpd-table min-w-[720px]">
+                          <thead>
+                            <tr className="text-xs text-gray-600">
+                              <th className="px-3 py-2 font-semibold">Devise</th>
+                              <th className="px-3 py-2 font-semibold">Catégorie</th>
+                              <th className="px-3 py-2 font-semibold">Description</th>
+                              <th className="px-3 py-2 font-semibold">Sens</th>
+                              <th className="px-3 py-2 font-semibold">Total</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {breakdown.map((b, idx) => (
+                              <tr key={`${b.currency}-${b.direction}-${b.transaction_type}-${b.description}-${idx}`} className="hover:bg-gray-50/60">
+                                <td className="px-3 py-2 text-sm text-gray-700">{b.currency || 'CDF'}</td>
+                                <td className="px-3 py-2 text-sm font-semibold text-gray-900">{b.transaction_type || '—'}</td>
+                                <td className="px-3 py-2 text-sm text-gray-700">{b.description || '—'}</td>
+                                <td className="px-3 py-2 text-sm text-gray-700">{b.direction === 'out' ? 'Sortie' : 'Entrée'}</td>
+                                <td className="px-3 py-2 text-sm font-semibold text-gray-900">{fmt(b.total || 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-600">Aucun détail.</div>
+                    )}
+                  </Section>
                 ) : null}
               </div>
             </div>
-          )}
-        </div>
+          )
+        )}
       </div>
     </div>
   );

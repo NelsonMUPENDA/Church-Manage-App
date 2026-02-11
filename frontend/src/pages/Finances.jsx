@@ -120,7 +120,6 @@ export default function Finances() {
   );
 
   const defaultExpenseForm = () => ({
-    link_to_event: false,
     event: '',
     amount: '',
     currency: '',
@@ -341,7 +340,6 @@ export default function Finances() {
     } else {
       setActiveForm('out');
       setExpenseForm({
-        link_to_event: !!tx.event,
         event: tx.event ? String(tx.event) : '',
         amount: String(tx.amount ?? ''),
         currency: (tx.currency || '').toUpperCase(),
@@ -501,12 +499,6 @@ export default function Finances() {
 
   const submitExpense = async (e) => {
     e.preventDefault();
-    if (!expenseForm.link_to_event) {
-      // keep payload consistent
-      if (String(expenseForm.event || '').trim()) {
-        setExpenseForm((f) => ({ ...f, event: '' }));
-      }
-    }
 
     if (!String(expenseForm.currency || '').trim()) {
       toast.push({ type: 'error', title: 'Devise requise', message: 'Sélectionnez la devise avant de saisir/valider.' });
@@ -544,7 +536,7 @@ export default function Finances() {
       if (editingTx?.id && editingTx.direction === 'out' && !expenseProof) {
         const res = await api.patch(`/api/financial-transactions/${editingTx.id}/`, {
           direction: 'out',
-          event: expenseForm.link_to_event ? eventValue : null,
+          event: eventValue,
           amount,
           currency: String((expenseForm.currency || 'CDF').toUpperCase()),
           transaction_type: String(expenseForm.transaction_type || 'functioning'),
@@ -567,7 +559,7 @@ export default function Finances() {
       } else {
         const fd = new FormData();
         fd.append('direction', 'out');
-        if (expenseForm.link_to_event && expenseForm.event) fd.append('event', String(expenseForm.event));
+        if (expenseForm.event) fd.append('event', String(expenseForm.event));
         fd.append('amount', String(amount));
         fd.append('currency', String((expenseForm.currency || 'CDF').toUpperCase()));
         fd.append('transaction_type', String(expenseForm.transaction_type || 'functioning'));
@@ -893,26 +885,8 @@ export default function Finances() {
         ) : (
           <form onSubmit={submitExpense} className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <div className="lg:col-span-3 min-w-0">
-              <div className="flex items-center justify-between gap-3 mb-1">
-                <div className="text-xs font-semibold text-gray-600">Activité / Événement</div>
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-700 select-none">
-                  <input
-                    type="checkbox"
-                    checked={!!expenseForm.link_to_event}
-                    onChange={(e) => {
-                      const checked = !!e.target.checked;
-                      setExpenseForm((f) => ({ ...f, link_to_event: checked, event: checked ? f.event : '' }));
-                    }}
-                  />
-                  Lier la sortie à une activité
-                </label>
-              </div>
-              <select
-                value={expenseForm.event}
-                onChange={(e) => setExpenseForm((f) => ({ ...f, event: e.target.value }))}
-                className="cpd-select"
-                disabled={loadingEvents || !expenseForm.link_to_event}
-              >
+              <div className="text-xs font-semibold text-gray-600 mb-1">Activité / Événement</div>
+              <select value={expenseForm.event} onChange={(e) => setExpenseForm((f) => ({ ...f, event: e.target.value }))} className="cpd-select" disabled={loadingEvents}>
                 <option value="">— Aucune activité —</option>
                 {events.map((ev) => (
                   <option key={ev.id} value={String(ev.id)}>

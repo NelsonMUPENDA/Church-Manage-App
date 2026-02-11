@@ -469,7 +469,14 @@ export default function Logistics() {
                     value={form.category}
                     onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                     className={`mt-1 ${inputClass}`}
+                    list="logistics-category-list"
+                    placeholder="Sélectionner ou saisir…"
                   />
+                  <datalist id="logistics-category-list">
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>
@@ -478,7 +485,7 @@ export default function Logistics() {
                     value={form.asset_tag}
                     onChange={(e) => setForm((f) => ({ ...f, asset_tag: e.target.value }))}
                     className={`mt-1 ${inputClass}`}
-                    placeholder="Ex: CPD-LOG-0001"
+                    placeholder="Ex: CDP-LOG-PC-000123"
                     disabled
                   />
                   <div className="mt-1 text-xs text-gray-500 dark:text-slate-400">Le code est généré automatiquement.</div>

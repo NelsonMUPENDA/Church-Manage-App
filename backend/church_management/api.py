@@ -1126,22 +1126,94 @@ class MemberViewSet(viewsets.ModelViewSet):
 
         title = 'FICHE MEMBRE'
         member_no = member.member_number or f"ID {member.id}"
-        full_name = ' '.join([_s(getattr(u, 'first_name', '')).strip(), _s(getattr(member, 'post_name', '')).strip(), _s(getattr(u, 'last_name', '')).strip()]).strip()
+        full_name = ' '.join([
+            _s(getattr(u, 'first_name', '')).strip(),
+            _s(getattr(member, 'post_name', '')).strip(),
+            _s(getattr(u, 'last_name', '')).strip(),
+        ]).strip()
 
-        top = h - 22 * mm
-        left = 16 * mm
-        right = w - 16 * mm
+        brand = FinancialTransactionViewSet()._pdf_brand_layout(
+            c,
+            doc_title=title,
+            doc_subtitle="Identification — Document officiel",
+            badge_text="MEMBRE",
+            badge_rgb=(0.12, 0.31, 0.47),
+        )
 
+        margin = brand['margin']
+        left = margin
+        right = w - margin
+        x = brand['x']
+        y = brand['y_start']
+
+        # Bloc en-tête: Photo + QR + infos principales
+        photo_box = 26 * mm
+        qr_box = 26 * mm
+        header_h = max(photo_box, qr_box)
+        header_y_top = y
+        header_y_bottom = header_y_top - header_h
+
+        # Photo membre
+        try:
+            photo_path = getattr(getattr(u, 'photo', None), 'path', None)
+            if photo_path and os.path.exists(photo_path):
+                c.setFillColorRGB(0.98, 0.98, 0.99)
+                c.roundRect(left, header_y_bottom, photo_box, photo_box, 8, fill=1, stroke=0)
+                c.drawImage(
+                    ImageReader(photo_path),
+                    left,
+                    header_y_bottom,
+                    photo_box,
+                    photo_box,
+                    preserveAspectRatio=True,
+                    mask='auto',
+                )
+            else:
+                c.setFillColorRGB(0.98, 0.98, 0.99)
+                c.roundRect(left, header_y_bottom, photo_box, photo_box, 8, fill=1, stroke=0)
+                c.setFillColorRGB(0.35, 0.35, 0.35)
+                c.setFont('Helvetica-Bold', 10)
+                initials = ''.join([_s(getattr(u, 'first_name', '')).strip()[:1], _s(getattr(u, 'last_name', '')).strip()[:1]]).upper()
+                c.drawCentredString(left + photo_box / 2, header_y_bottom + photo_box / 2 - 4, initials or '—')
+        except Exception:
+            pass
+
+        # QR code membre (payload stable)
+        try:
+            payload = f"CPD|{member_no}"
+            qr_img = qrcode.make(payload)
+            try:
+                qr_img = qr_img.convert('RGB')
+            except Exception:
+                pass
+            qx = right - qr_box
+            c.setFillColorRGB(1, 1, 1)
+            c.roundRect(qx, header_y_bottom, qr_box, qr_box, 8, fill=1, stroke=0)
+            c.drawImage(
+                ImageReader(qr_img),
+                qx,
+                header_y_bottom,
+                qr_box,
+                qr_box,
+                preserveAspectRatio=True,
+                mask='auto',
+            )
+        except Exception:
+            pass
+
+        # Identité (texte)
+        text_x = left + photo_box + 8 * mm
         c.setFillColorRGB(0.12, 0.31, 0.47)
-        c.rect(0, h - 30 * mm, w, 30 * mm, fill=1, stroke=0)
-        c.setFillColorRGB(1, 1, 1)
-        c.setFont('Helvetica-Bold', 16)
-        c.drawString(left, h - 18 * mm, title)
-        c.setFont('Helvetica', 10)
-        c.drawRightString(right, h - 18 * mm, f"N° {member_no}")
+        c.setFont('Helvetica-Bold', 14)
+        c.drawString(text_x, header_y_top - 3 * mm, full_name or '—')
+        c.setFillColorRGB(0.20, 0.24, 0.30)
+        c.setFont('Helvetica', 9)
+        c.drawString(text_x, header_y_top - 9 * mm, f"N° {member_no}")
+        c.drawString(text_x, header_y_top - 14 * mm, f"Téléphone: {_s(getattr(u, 'phone', None) or '—')}")
+        c.drawString(text_x, header_y_top - 19 * mm, f"Email: {_s(getattr(u, 'email', None) or '—')}")
 
         c.setFillColorRGB(0, 0, 0)
-        y = top - 18 * mm
+        y = header_y_bottom - 8 * mm
 
         def section(label):
             nonlocal y
@@ -1156,7 +1228,14 @@ class MemberViewSet(viewsets.ModelViewSet):
             nonlocal y
             if y < 22 * mm:
                 c.showPage()
-                y = h - 20 * mm
+                brand2 = FinancialTransactionViewSet()._pdf_brand_layout(
+                    c,
+                    doc_title=title,
+                    doc_subtitle="Identification — Document officiel",
+                    badge_text="MEMBRE",
+                    badge_rgb=(0.12, 0.31, 0.47),
+                )
+                y = brand2['y_start']
             c.setFont('Helvetica-Bold', 9)
             c.drawString(left, y, f"{label} :")
             c.setFont('Helvetica', 9)
@@ -1165,7 +1244,14 @@ class MemberViewSet(viewsets.ModelViewSet):
             for i, line in enumerate(lines):
                 if y < 22 * mm:
                     c.showPage()
-                    y = h - 20 * mm
+                    brand3 = FinancialTransactionViewSet()._pdf_brand_layout(
+                        c,
+                        doc_title=title,
+                        doc_subtitle="Identification — Document officiel",
+                        badge_text="MEMBRE",
+                        badge_rgb=(0.12, 0.31, 0.47),
+                    )
+                    y = brand3['y_start']
                     c.setFont('Helvetica', 9)
                 c.drawString(first_x, y, line if i > 0 else line)
                 if i < len(lines) - 1:
@@ -5631,6 +5717,7 @@ class LogisticsItemViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        qs = qs.filter(is_active=True)
         q = (self.request.query_params.get('q') or '').strip()
         if q:
             qs = qs.filter(
