@@ -39,8 +39,10 @@ import Announcements from './pages/Announcements';
 import Logistics from './pages/Logistics';
 import About from './pages/About';
 import Account from './pages/Account';
-import PublicEvent from './pages/PublicEvent';
+import PublicHome from './pages/PublicHome';
+import PublicAbout from './pages/PublicAbout';
 import AuditLogs from './pages/AuditLogs';
+import PublicEvent from './pages/PublicEvent';
 import Login from './pages/Login';
 import { useAuth } from './contexts/AuthProvider';
 import { useApprovalQueue } from './contexts/ApprovalQueueProvider';
@@ -1030,6 +1032,8 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<PublicHome />} />
+        <Route path="/about" element={<PublicAbout />} />
         <Route path="/login" element={<Login />} />
         <Route path="/p/:slug" element={<PublicEvent />} />
         <Route
