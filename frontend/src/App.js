@@ -42,7 +42,7 @@ import Account from './pages/Account';
 import PublicEvent from './pages/PublicEvent';
 import AuditLogs from './pages/AuditLogs';
 import Login from './pages/Login';
-import PublicHome from './pages/PublicHome';
+import PublicHome from './pages/PublicHomeEnhanced';
 import PublicChurch from './pages/PublicChurch';
 import Publications from './pages/Publications';
 import { useAuth } from './contexts/AuthProvider';
