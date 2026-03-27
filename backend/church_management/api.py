@@ -82,6 +82,7 @@ from .models import (
 from .permissions import (
     IsAdminOrSuperAdmin,
     IsAdminOrSuperAdminOrReadOnly,
+    PublicReadAdminWrite,
     IsDepartmentHeadOrAdmin,
     IsEvangelismHeadOrAdmin,
     IsLogisticsHeadOrAdmin,
@@ -4771,7 +4772,7 @@ class FinancialTransactionViewSet(viewsets.ModelViewSet):
 class AnnouncementViewSet(viewsets.ModelViewSet):
     queryset = Announcement.objects.all().order_by('-published_date')
     serializer_class = AnnouncementSerializer
-    permission_classes = [IsAdminOrSuperAdminOrReadOnly]
+    permission_classes = [PublicReadAdminWrite]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_permissions(self):
@@ -5845,7 +5846,7 @@ class ChurchBiographyViewSet(viewsets.ModelViewSet):
     """ViewSet pour gérer la biographie de l'église"""
     queryset = ChurchBiography.objects.all()
     serializer_class = ChurchBiographySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [PublicReadAdminWrite]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -5885,7 +5886,7 @@ class ChurchConsistoryViewSet(viewsets.ModelViewSet):
     """ViewSet pour gérer les informations du consistoire"""
     queryset = ChurchConsistory.objects.all()
     serializer_class = ChurchConsistorySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [PublicReadAdminWrite]
 
     def get_queryset(self):
         qs = super().get_queryset()

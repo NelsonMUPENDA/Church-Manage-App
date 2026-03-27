@@ -42,6 +42,9 @@ import Account from './pages/Account';
 import PublicEvent from './pages/PublicEvent';
 import AuditLogs from './pages/AuditLogs';
 import Login from './pages/Login';
+import PublicHome from './pages/PublicHome';
+import PublicChurch from './pages/PublicChurch';
+import Publications from './pages/Publications';
 import { useAuth } from './contexts/AuthProvider';
 import { useApprovalQueue } from './contexts/ApprovalQueueProvider';
 import { useTheme } from './contexts/ThemeProvider';
@@ -976,7 +979,6 @@ function Shell() {
           <div className="h-full overflow-y-auto p-3 sm:p-6 lg:p-8 cpd-scroll">
             <AnimatePresence mode="wait">
               <Routes location={location}>
-                <Route path="/" element={pageWrap(<Navigate to="/dashboard" replace />)} />
                 <Route
                   path="/dashboard"
                   element={
@@ -1030,6 +1032,9 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<PublicHome />} />
+        <Route path="/eglise" element={<PublicChurch />} />
+        <Route path="/publications" element={<Publications />} />
         <Route path="/login" element={<Login />} />
         <Route path="/p/:slug" element={<PublicEvent />} />
         <Route

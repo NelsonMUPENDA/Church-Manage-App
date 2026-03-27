@@ -121,3 +121,20 @@ class IsAdminOrSuperAdminOrReadOnly(BasePermission):
             return True
 
         return getattr(request.user, 'role', None) in {'super_admin', 'pastor', 'admin', 'administrator'}
+
+
+class PublicReadAdminWrite(BasePermission):
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        if getattr(request.user, 'is_staff', False):
+            return True
+
+        return getattr(request.user, 'role', None) in {'super_admin', 'pastor', 'admin', 'administrator'}
