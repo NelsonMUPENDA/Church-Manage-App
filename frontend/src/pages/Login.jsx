@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowPathIcon,
@@ -285,9 +285,12 @@ export default function Login() {
                   </span>
                 </motion.button>
 
-                <div className="text-xs text-gray-500 dark:text-slate-400">
-                  Identifiants par défaut: <span className="font-semibold">admin / admin123</span>
-                </div>
+                <Link 
+                  to="/" 
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition-colors"
+                >
+                  Retour à l'accueil
+                </Link>
               </form>
             </div>
           </motion.div>
