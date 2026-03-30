@@ -41,6 +41,10 @@ import About from './pages/About';
 import Account from './pages/Account';
 import PublicHome from './pages/PublicHome';
 import PublicAbout from './pages/PublicAbout';
+import PublicPublications from './pages/PublicPublications';
+import PublicDiffusions from './pages/PublicDiffusions';
+import PublicEvenements from './pages/PublicEvenements';
+import PublicContact from './pages/PublicContact';
 import AuditLogs from './pages/AuditLogs';
 import PublicEvent from './pages/PublicEvent';
 import Login from './pages/Login';
@@ -1034,6 +1038,10 @@ function App() {
       <Routes>
         <Route path="/" element={<PublicHome />} />
         <Route path="/about" element={<PublicAbout />} />
+        <Route path="/publications" element={<PublicPublications />} />
+        <Route path="/diffusions" element={<PublicDiffusions />} />
+        <Route path="/evenements" element={<PublicEvenements />} />
+        <Route path="/contact" element={<PublicContact />} />
         <Route path="/login" element={<Login />} />
         <Route path="/p/:slug" element={<PublicEvent />} />
         <Route
