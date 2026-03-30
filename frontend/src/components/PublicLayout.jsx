@@ -253,7 +253,10 @@ export function PublicFooter() {
         </div>
 
         <div className="mt-12 pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-gray-400 text-sm">© {new Date().getFullYear()} Consolation et Paix Divine. Tous droits réservés.</p>
+          <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 text-sm">
+            <p className="text-gray-400">© {new Date().getFullYear()} Consolation et Paix Divine. Tous droits réservés.</p>
+            <p className="text-gray-500">Propulsé et développé par <a href="https://www.mupenda.cd" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors font-medium">Mupenda Company</a></p>
+          </div>
           <div className="flex gap-6 text-gray-400 text-sm">
             <Link to="/" className="hover:text-white transition-colors">Confidentialité</Link>
             <Link to="/" className="hover:text-white transition-colors">Conditions d'utilisation</Link>

@@ -559,6 +559,14 @@ class ChurchBiography(models.Model):
     """Modèle pour gérer la biographie de l'église"""
     title = models.CharField(max_length=200, default="Biographie de l'église")
     content = models.TextField(help_text="Contenu de la biographie de l'église")
+    # Champs de contact
+    address = models.TextField(blank=True, null=True, help_text="Adresse complète de l'église")
+    phone = models.CharField(max_length=50, blank=True, null=True, help_text="Numéro de téléphone principal")
+    email = models.EmailField(blank=True, null=True, help_text="Email de contact")
+    facebook_url = models.URLField(blank=True, null=True, help_text="Lien Facebook")
+    youtube_url = models.URLField(blank=True, null=True, help_text="Lien YouTube")
+    instagram_url = models.URLField(blank=True, null=True, help_text="Lien Instagram")
+    service_times = models.JSONField(blank=True, null=True, default=list, help_text="Horaires des cultes (JSON)")
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='biographies')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -587,3 +595,47 @@ class ChurchConsistory(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class Contact(models.Model):
+    """Modèle pour stocker les messages envoyés via le formulaire de contact"""
+    SUBJECT_CHOICES = [
+        ('general', 'Demande générale'),
+        ('prayer', 'Demande de prière'),
+        ('visit', 'Planifier une visite'),
+        ('other', 'Autre'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('new', 'Nouveau'),
+        ('read', 'Lu'),
+        ('in_progress', 'En cours'),
+        ('answered', 'Répondu'),
+        ('archived', 'Archivé'),
+    ]
+    
+    name = models.CharField(max_length=150, help_text="Nom complet de l'expéditeur")
+    email = models.EmailField(help_text="Email de l'expéditeur")
+    phone = models.CharField(max_length=30, blank=True, null=True, help_text="Téléphone de l'expéditeur")
+    subject = models.CharField(max_length=20, choices=SUBJECT_CHOICES, default='general', help_text="Sujet du message")
+    message = models.TextField(help_text="Contenu du message")
+    
+    # Statut et suivi
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new', help_text="Statut du message")
+    notes = models.TextField(blank=True, null=True, help_text="Notes internes pour l'administration")
+    answered_by = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='answered_contacts')
+    answered_at = models.DateTimeField(blank=True, null=True)
+    
+    # Métadonnées
+    ip_address = models.GenericIPAddressField(blank=True, null=True, help_text="Adresse IP de l'expéditeur")
+    user_agent = models.TextField(blank=True, null=True, help_text="User agent du navigateur")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Message de contact"
+        verbose_name_plural = "Messages de contact"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} - {self.get_subject_display()} ({self.get_status_display()})"

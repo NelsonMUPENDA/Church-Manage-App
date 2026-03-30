@@ -15,6 +15,7 @@ from .models import (
     Attendance,
     ChurchBiography,
     ChurchConsistory,
+    Contact,
     Department,
     Document,
     Event,
@@ -839,7 +840,11 @@ class ChurchBiographySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChurchBiography
-        fields = '__all__'
+        fields = (
+            'id', 'title', 'content', 'address', 'phone', 'email',
+            'facebook_url', 'youtube_url', 'instagram_url', 'service_times',
+            'is_active', 'created_at', 'updated_at', 'created_by', 'created_by_username'
+        )
         read_only_fields = ('id', 'created_at', 'updated_at', 'created_by')
 
     def get_created_by_username(self, obj):
@@ -858,3 +863,49 @@ class ChurchConsistorySerializer(serializers.ModelSerializer):
     def get_created_by_username(self, obj):
         u = getattr(obj, 'created_by', None)
         return getattr(u, 'username', None) if u else None
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    """Serializer pour les messages de contact"""
+    answered_by_username = serializers.SerializerMethodField(read_only=True)
+    subject_label = serializers.SerializerMethodField(read_only=True)
+    status_label = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = Contact
+        fields = (
+            'id', 'name', 'email', 'phone', 'subject', 'subject_label',
+            'message', 'status', 'status_label', 'notes', 'answered_by',
+            'answered_by_username', 'answered_at', 'ip_address', 'user_agent',
+            'created_at', 'updated_at'
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at', 'ip_address', 'user_agent', 'answered_at')
+
+    def get_answered_by_username(self, obj):
+        u = getattr(obj, 'answered_by', None)
+        return getattr(u, 'username', None) if u else None
+
+    def get_subject_label(self, obj):
+        return dict(Contact.SUBJECT_CHOICES).get(obj.subject, obj.subject)
+
+    def get_status_label(self, obj):
+        return dict(Contact.STATUS_CHOICES).get(obj.status, obj.status)
+
+    def validate(self, attrs):
+        # Valider le nom
+        name = attrs.get('name')
+        if name:
+            attrs['name'] = str(name).strip()
+        
+        # Valider l'email
+        email = attrs.get('email')
+        if email:
+            attrs['email'] = str(email).strip().lower()
+        
+        # Valider le message
+        message = attrs.get('message')
+        if message and len(str(message).strip()) < 10:
+            raise serializers.ValidationError({'message': 'Le message doit contenir au moins 10 caractères.'})
+        
+        return attrs
+
