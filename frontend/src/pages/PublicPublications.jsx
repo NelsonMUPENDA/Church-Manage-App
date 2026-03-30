@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -9,10 +9,14 @@ import {
   BookmarkIcon,
   HeartIcon,
   ChatBubbleLeftRightIcon,
+  PaperAirplaneIcon,
+  XMarkIcon,
+  UserIcon,
 } from '@heroicons/react/24/outline';
 
 import PublicLayout from '../components/PublicLayout';
 import { api } from '../services/apiClient';
+import { useAuth } from '../contexts/AuthProvider';
 
 const CATEGORIES = ['Tous', 'Annonce', 'Formation', 'Évangélisation', 'Célébration', 'Rapport'];
 
@@ -33,6 +37,13 @@ const fmtDate = (iso) => {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
+const fmtDateTime = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+};
+
 const initials = (name) => {
   const s = String(name || '').trim();
   if (!s) return 'A';
@@ -42,11 +53,17 @@ const initials = (name) => {
 };
 
 export default function PublicPublications() {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState('Tous');
   const [searchQuery, setSearchQuery] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // État pour les commentaires
+  const [commentState, setCommentState] = useState({});
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Charger les annonces depuis la BD
   const loadAnnouncements = async () => {
@@ -68,6 +85,96 @@ export default function PublicPublications() {
     loadAnnouncements();
   }, []);
 
+  // Fonction pour liker une publication
+  const toggleLike = async (pub) => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
+    try {
+      const res = await api.post(`/api/announcements/${pub.id}/like/`);
+      const liked = Boolean(res?.data?.liked);
+      const likeCount = Number(res?.data?.like_count ?? (pub.like_count || 0));
+      setItems((prev) => prev.map((x) => (x.id === pub.id ? { ...x, liked_by_me: liked, like_count: likeCount } : x)));
+    } catch (err) {
+      console.error('Erreur lors du like:', err);
+    }
+  };
+
+  // Charger les commentaires d'une publication
+  const loadComments = async (pub) => {
+    setCommentState((prev) => ({
+      ...prev,
+      [pub.id]: { ...(prev[pub.id] || {}), loading: true, open: true }
+    }));
+    try {
+      const res = await api.get(`/api/announcements/${pub.id}/comments/`);
+      const data = Array.isArray(res.data) ? res.data : res.data?.results || [];
+      setCommentState((prev) => ({
+        ...prev,
+        [pub.id]: { ...prev[pub.id], items: data, loading: false, loaded: true, text: '' }
+      }));
+    } catch (err) {
+      setCommentState((prev) => ({
+        ...prev,
+        [pub.id]: { ...(prev[pub.id] || {}), loading: false, error: true }
+      }));
+    }
+  };
+
+  // Toggle l'affichage des commentaires
+  const toggleComments = (pub) => {
+    const st = commentState[pub.id];
+    if (!st) {
+      loadComments(pub);
+      return;
+    }
+    setCommentState((prev) => ({
+      ...prev,
+      [pub.id]: { ...st, open: !st.open }
+    }));
+    if (!st.loaded && !st.loading && !st.error) loadComments(pub);
+  };
+
+  // Soumettre un commentaire
+  const submitComment = async (pub) => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
+    const st = commentState[pub.id];
+    const text = String(st?.text || '').trim();
+    if (!text) return;
+    
+    setCommentState((prev) => ({
+      ...prev,
+      [pub.id]: { ...(prev[pub.id] || {}), sending: true }
+    }));
+    try {
+      await api.post(`/api/announcements/${pub.id}/comments/`, { body: text });
+      setCommentState((prev) => ({
+        ...prev,
+        [pub.id]: { ...(prev[pub.id] || {}), text: '', sending: false }
+      }));
+      await loadComments(pub);
+      setItems((prev) => prev.map((x) => (x.id === pub.id ? { ...x, comment_count: (x.comment_count || 0) + 1 } : x)));
+    } catch (err) {
+      setCommentState((prev) => ({
+        ...prev,
+        [pub.id]: { ...(prev[pub.id] || {}), sending: false }
+      }));
+      console.error('Erreur lors du commentaire:', err);
+    }
+  };
+
+  // Mettre à jour le texte du commentaire
+  const setCommentText = (pubId, text) => {
+    setCommentState((prev) => ({
+      ...prev,
+      [pubId]: { ...(prev[pubId] || {}), text }
+    }));
+  };
+
   // Filtrer les publications
   const filteredPublications = items.filter(pub => {
     const matchesCategory = selectedCategory === 'Tous' || pub.category === selectedCategory;
@@ -81,6 +188,45 @@ export default function PublicPublications() {
 
   return (
     <PublicLayout>
+      {/* Modal de connexion */}
+      <AnimatePresence>
+        {showLoginModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowLoginModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Connexion requise</h3>
+                <button onClick={() => setShowLoginModal(false)} className="p-1 rounded-full hover:bg-gray-100">
+                  <XMarkIcon className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+              <p className="text-gray-600 dark:text-slate-400 mb-6">Connectez-vous pour aimer et commenter les publications.</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowLoginModal(false)} 
+                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={() => navigate('/login')} 
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium"
+                >
+                  Se connecter
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <section className="relative pt-32 pb-20 overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950" />
@@ -117,17 +263,21 @@ export default function PublicPublications() {
                     <span>•</span>
                     <span>{fmtDate(featuredPub.published_date)}</span>
                   </div>
-                  <div className="flex items-center gap-4 text-white/80 text-sm mb-6">
-                    {featuredPub.like_count > 0 && (
-                      <span className="flex items-center gap-1">
-                        <HeartIcon className="h-4 w-4" />{featuredPub.like_count}
-                      </span>
-                    )}
-                    {featuredPub.comment_count > 0 && (
-                      <span className="flex items-center gap-1">
-                        <ChatBubbleLeftRightIcon className="h-4 w-4" />{featuredPub.comment_count}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-6 text-white/80">
+                    <button 
+                      onClick={() => toggleLike(featuredPub)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors ${featuredPub.liked_by_me ? 'bg-white/30' : 'bg-white/10 hover:bg-white/20'}`}
+                    >
+                      <HeartIcon className={`h-5 w-5 ${featuredPub.liked_by_me ? 'fill-rose-400 text-rose-400' : ''}`} />
+                      <span>{featuredPub.like_count || 0}</span>
+                    </button>
+                    <button 
+                      onClick={() => toggleComments(featuredPub)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                    >
+                      <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                      <span>{featuredPub.comment_count || 0}</span>
+                    </button>
                   </div>
                 </div>
                 <div className="hidden lg:flex items-center justify-center bg-white/10">
@@ -187,58 +337,126 @@ export default function PublicPublications() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPublications.map((pub, index) => (
-                <motion.div key={pub.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.05 }} className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-                  {/* Image */}
-                  <div className="h-48 bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center relative overflow-hidden">
-                    {pub.image ? (
-                      <img src={mediaUrl(pub.image)} alt={pub.title} className="h-full w-full object-cover" />
-                    ) : (
-                      <BookOpenIcon className="h-16 w-16 text-indigo-300" />
-                    )}
-                    {pub.is_active === false && (
-                      <div className="absolute top-3 left-3 px-2 py-1 rounded-full bg-gray-600 text-white text-xs font-medium">
-                        Inactif
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Contenu */}
-                  <div className="p-6">
-                    {/* Auteur et date */}
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="h-8 w-8 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-center text-xs font-bold">
-                        {initials(pub.author_name || 'Admin')}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        <span className="font-medium text-gray-700">{pub.author_name || 'Admin'}</span>
-                        <span className="mx-1">•</span>
-                        <span>{fmtDate(pub.published_date)}</span>
-                      </div>
+              {filteredPublications.map((pub, index) => {
+                const st = commentState[pub.id];
+                return (
+                  <motion.div key={pub.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.05 }} className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+                    {/* Image */}
+                    <div className="h-48 bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center relative overflow-hidden">
+                      {pub.image ? (
+                        <img src={mediaUrl(pub.image)} alt={pub.title} className="h-full w-full object-cover" />
+                      ) : (
+                        <BookOpenIcon className="h-16 w-16 text-indigo-300" />
+                      )}
+                      {pub.is_active === false && (
+                        <div className="absolute top-3 left-3 px-2 py-1 rounded-full bg-gray-600 text-white text-xs font-medium">
+                          Inactif
+                        </div>
+                      )}
                     </div>
 
-                    {/* Titre et contenu */}
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 line-clamp-2">{pub.title}</h3>
-                    <p className="text-gray-500 text-sm mb-4 line-clamp-3">{pub.content}</p>
-
-                    {/* Stats */}
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                      <div className="flex items-center gap-4 text-sm text-gray-400">
-                        {pub.like_count > 0 && (
-                          <span className="flex items-center gap-1">
-                            <HeartIcon className="h-4 w-4 text-rose-500" />{pub.like_count}
-                          </span>
-                        )}
-                        {pub.comment_count > 0 && (
-                          <span className="flex items-center gap-1">
-                            <ChatBubbleLeftRightIcon className="h-4 w-4 text-indigo-500" />{pub.comment_count}
-                          </span>
-                        )}
+                    {/* Contenu */}
+                    <div className="p-6">
+                      {/* Auteur et date */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="h-8 w-8 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-center text-xs font-bold">
+                          {initials(pub.author_name || 'Admin')}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          <span className="font-medium text-gray-700">{pub.author_name || 'Admin'}</span>
+                          <span className="mx-1">•</span>
+                          <span>{fmtDate(pub.published_date)}</span>
+                        </div>
                       </div>
+
+                      {/* Titre et contenu */}
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 line-clamp-2">{pub.title}</h3>
+                      <p className="text-gray-500 text-sm mb-4 line-clamp-3">{pub.content}</p>
+
+                      {/* Boutons Like et Commentaire */}
+                      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                        <button 
+                          onClick={() => toggleLike(pub)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${pub.liked_by_me ? 'text-rose-500 bg-rose-50' : 'text-gray-500 hover:bg-gray-100'}`}
+                        >
+                          <HeartIcon className={`h-5 w-5 ${pub.liked_by_me ? 'fill-current' : ''}`} />
+                          <span className="text-sm font-medium">{pub.like_count || 0}</span>
+                        </button>
+                        <button 
+                          onClick={() => toggleComments(pub)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${st?.open ? 'text-indigo-600 bg-indigo-50' : 'text-gray-500 hover:bg-gray-100'}`}
+                        >
+                          <ChatBubbleLeftRightIcon className="h-5 w-5" />
+                          <span className="text-sm font-medium">{pub.comment_count || 0}</span>
+                        </button>
+                      </div>
+
+                      {/* Section Commentaires */}
+                      <AnimatePresence>
+                        {st?.open && (
+                          <motion.div 
+                            initial={{ height: 0, opacity: 0 }} 
+                            animate={{ height: 'auto', opacity: 1 }} 
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="mt-4 pt-4 border-t border-gray-100">
+                              {/* Liste des commentaires */}
+                              {st?.loading ? (
+                                <div className="text-center py-4">
+                                  <div className="inline-flex h-6 w-6 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+                                </div>
+                              ) : st?.items?.length > 0 ? (
+                                <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
+                                  {st.items.map((comment) => (
+                                    <div key={comment.id} className="flex gap-3">
+                                      <div className="h-8 w-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                                        {initials(comment.author_name || 'User')}
+                                      </div>
+                                      <div className="flex-1 bg-gray-50 rounded-2xl rounded-tl-none px-3 py-2">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-xs font-semibold text-gray-700">{comment.author_name || 'Utilisateur'}</span>
+                                          <span className="text-xs text-gray-400">{fmtDateTime(comment.created_at)}</span>
+                                        </div>
+                                        <p className="text-sm text-gray-600">{comment.body}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-center text-gray-400 text-sm py-4">Aucun commentaire. Soyez le premier !</p>
+                              )}
+
+                              {/* Formulaire de commentaire */}
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={st?.text || ''}
+                                  onChange={(e) => setCommentText(pub.id, e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && submitComment(pub)}
+                                  placeholder="Ajouter un commentaire..."
+                                  className="flex-1 px-4 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                                />
+                                <button
+                                  onClick={() => submitComment(pub)}
+                                  disabled={st?.sending || !st?.text?.trim()}
+                                  className="px-3 py-2 bg-indigo-600 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {st?.sending ? (
+                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                                  ) : (
+                                    <PaperAirplaneIcon className="h-5 w-5" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </div>
