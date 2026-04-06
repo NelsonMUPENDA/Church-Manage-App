@@ -2,7 +2,12 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SECRET_KEY = 'django-insecure-change-me'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
+
+ALLOWED_HOSTS = [
+    'consolationetpaixdivine.org',
+    'www.consolationetpaixdivine.org',
+]
 
 # Configuration SQLite (pas besoin de serveur de base de données séparé)
 DATABASES = {
@@ -12,11 +17,12 @@ DATABASES = {
     }
 }
 
-# Other basic Django settings can be added here as needed.
+DEBUG = False
 
-DEBUG = True
-
-ALLOWED_HOSTS = ['*'] if DEBUG else ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = [
+    'consolationetpaixdivine.org', 
+    'www.consolationetpaixdivine.org'
+]
 
 INSTALLED_APPS = [
     'corsheaders',
@@ -33,6 +39,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Pour servir les fichiers statiques
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -77,28 +84,22 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+LANGUAGE_CODE = 'fr-FR'
+TIME_ZONE = 'Europe/Paris'
 USE_I18N = True
 USE_TZ = True
 
+# Fichiers statiques (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# Fichiers médias (uploads utilisateurs)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 AUTH_USER_MODEL = 'church_management.User'
-
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-]
-
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -122,7 +123,7 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@cpd.local')
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Consolation et Paix Divine API',
-    'DESCRIPTION': 'API REST pour la gestion de l’église Consolation et Paix Divine.',
+    'DESCRIPTION': 'API REST pour la gestion de l\’église Consolation et Paix Divine.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
