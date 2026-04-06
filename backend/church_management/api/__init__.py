@@ -33,7 +33,8 @@ from .finance import FinancialCategoryViewSet, FinancialTransactionViewSet
 # Content
 from .content import (
     AnnouncementViewSet, AnnouncementDeckViewSet,
-    DocumentViewSet, ChurchBiographyViewSet, ChurchConsistoryViewSet
+    DocumentViewSet, ChurchBiographyViewSet, ChurchConsistoryViewSet,
+    ContactViewSet
 )
 
 # Logistics
@@ -72,6 +73,7 @@ __all__ = [
     'DocumentViewSet',
     'ChurchBiographyViewSet',
     'ChurchConsistoryViewSet',
+    'ContactViewSet',
     # Logistics
     'LogisticsItemViewSet',
     # System

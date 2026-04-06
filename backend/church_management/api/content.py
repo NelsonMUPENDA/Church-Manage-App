@@ -27,14 +27,14 @@ from .helpers import _client_ip, _safe_payload
 from ..models import (
     Announcement, AnnouncementComment, AnnouncementCommentLike, AnnouncementLike,
     AnnouncementDeck, AnnouncementDeckItem,
-    Document, ChurchBiography, ChurchConsistory,
+    Document, ChurchBiography, ChurchConsistory, Contact,
     AuditLogEntry
 )
 from ..permissions import IsAdminOrSuperAdmin, PublicReadAdminWrite
 from ..serializers import (
     AnnouncementSerializer, AnnouncementCommentSerializer,
     AnnouncementDeckSerializer, AnnouncementDeckItemSerializer,
-    DocumentSerializer, ChurchBiographySerializer, ChurchConsistorySerializer
+    DocumentSerializer, ChurchBiographySerializer, ChurchConsistorySerializer, ContactSerializer
 )
 
 
@@ -313,3 +313,34 @@ class ChurchConsistoryViewSet(viewsets.ModelViewSet):
                 'is_active': getattr(obj, 'is_active', None),
             },
         )
+
+
+class ContactViewSet(viewsets.ModelViewSet):
+    """ViewSet pour gérer les messages de contact"""
+    queryset = Contact.objects.all().order_by('-created_at')
+    serializer_class = ContactSerializer
+    permission_classes = [PublicReadAdminWrite]
+
+    def get_permissions(self):
+        # Permettre à tout le monde de créer un message (POST)
+        # Mais restreindre la lecture et la modification aux admins
+        if self.action == 'create':
+            return []
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        # Capturer l'IP et le user agent pour les messages publics
+        request = self.request
+        ip = _client_ip(request)
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        serializer.save(ip_address=ip, user_agent=user_agent)
+
+    @action(detail=True, methods=['post'], url_path='answer')
+    def answer(self, request, pk=None):
+        """Marquer un message comme répondu"""
+        contact = self.get_object()
+        contact.status = 'answered'
+        contact.answered_by = request.user
+        contact.answered_at = timezone.now()
+        contact.save()
+        return Response({'status': 'answered', 'answered_by': request.user.username})
