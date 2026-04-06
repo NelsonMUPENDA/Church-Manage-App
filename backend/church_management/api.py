@@ -54,6 +54,7 @@ from .models import (
     Attendance,
     ChurchBiography,
     ChurchConsistory,
+    Contact,
     Department,
     Document,
     Event,
@@ -99,6 +100,7 @@ from .serializers import (
     AttendanceSerializer,
     ChurchBiographySerializer,
     ChurchConsistorySerializer,
+    ContactSerializer,
     DepartmentSerializer,
     DocumentSerializer,
     ActivityDurationSerializer,
@@ -790,6 +792,12 @@ class DashboardSummaryView(APIView):
                 'attendance_rate_week': attendance_rate,
                 'attendance_present_week': attendance_present,
                 'attendance_rows_week': attendance_total,
+                # Nouveaux stats pour Contact, ChurchBiography et ChurchConsistory
+                'contacts_new': Contact.objects.filter(status='new').count(),
+                'contacts_total': Contact.objects.count(),
+                'contacts_week': Contact.objects.filter(created_at__date__gte=week_start).count(),
+                'church_biography_active': ChurchBiography.objects.filter(is_active=True).count(),
+                'church_consistory_active': ChurchConsistory.objects.filter(is_active=True).count(),
             },
             'alerts': alerts,
             'recent_activity': activities,
@@ -5920,3 +5928,101 @@ class ChurchConsistoryViewSet(viewsets.ModelViewSet):
                 'is_active': getattr(obj, 'is_active', None),
             },
         )
+
+
+class ContactViewSet(viewsets.ModelViewSet):
+    """ViewSet pour gérer les messages de contact"""
+    queryset = Contact.objects.all()
+    serializer_class = ContactSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        """Autoriser la création (POST) sans authentification pour le formulaire public"""
+        if self.action == 'create':
+            return [AllowAny()]
+        return super().get_permissions()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Filtrer par statut si fourni
+        status = self.request.query_params.get('status')
+        if status:
+            qs = qs.filter(status=status)
+        # Filtrer par sujet si fourni
+        subject = self.request.query_params.get('subject')
+        if subject:
+            qs = qs.filter(subject=subject)
+        return qs.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        """Créer un message avec capture automatique de l'IP et user agent"""
+        request = self.request
+        ip = _client_ip(request)
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        
+        serializer.save(
+            ip_address=ip,
+            user_agent=user_agent
+        )
+        self._log_action('create', serializer.instance)
+
+    def perform_update(self, serializer):
+        """Marquer comme répondu si le statut change à 'answered'"""
+        from django.utils import timezone
+        
+        if serializer.validated_data.get('status') == 'answered' and serializer.instance.status != 'answered':
+            serializer.save(
+                answered_by=self.request.user,
+                answered_at=timezone.now()
+            )
+        else:
+            serializer.save()
+        self._log_action('update', serializer.instance)
+
+    def destroy(self, request, *args, **kwargs):
+        """Suppression définitive du message"""
+        obj = self.get_object()
+        self._log_action('delete', obj)
+        obj.delete()
+        return Response(status=204)
+
+    @action(detail=True, methods=['post'])
+    def mark_as_read(self, request, pk=None):
+        """Action personnalisée pour marquer comme lu"""
+        obj = self.get_object()
+        obj.status = 'read'
+        obj.save()
+        self._log_action('mark_as_read', obj)
+        return Response(ContactSerializer(obj).data)
+
+    @action(detail=True, methods=['post'])
+    def mark_as_answered(self, request, pk=None):
+        """Action personnalisée pour marquer comme répondu"""
+        from django.utils import timezone
+        obj = self.get_object()
+        obj.status = 'answered'
+        obj.answered_by = request.user
+        obj.answered_at = timezone.now()
+        obj.save()
+        self._log_action('mark_as_answered', obj)
+        return Response(ContactSerializer(obj).data)
+
+    def _log_action(self, action, obj):
+        """Journaliser les actions"""
+        try:
+            AuditLogEntry.objects.create(
+                actor=getattr(self.request, 'user', None),
+                action=action,
+                model='Contact',
+                object_id=str(getattr(obj, 'pk', '')),
+                object_repr=f"{getattr(obj, 'name', '')} - {getattr(obj, 'subject', '')}",
+                ip_address=_client_ip(self.request),
+                payload={
+                    'name': getattr(obj, 'name', None),
+                    'email': getattr(obj, 'email', None),
+                    'subject': getattr(obj, 'subject', None),
+                    'status': getattr(obj, 'status', None),
+                },
+            )
+        except Exception:
+            pass  # Ignorer les erreurs de logging

@@ -39,8 +39,14 @@ import Announcements from './pages/Announcements';
 import Logistics from './pages/Logistics';
 import About from './pages/About';
 import Account from './pages/Account';
-import PublicEvent from './pages/PublicEvent';
+import PublicHome from './pages/PublicHome';
+import PublicAbout from './pages/PublicAbout';
+import PublicPublications from './pages/PublicPublications';
+import PublicDiffusions from './pages/PublicDiffusions';
+import PublicEvenements from './pages/PublicEvenements';
+import PublicContact from './pages/PublicContact';
 import AuditLogs from './pages/AuditLogs';
+import PublicEvent from './pages/PublicEvent';
 import Login from './pages/Login';
 import PublicHome from './pages/PublicHomeEnhanced';
 import PublicChurch from './pages/PublicChurch';
@@ -1032,9 +1038,6 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<PublicHome />} />
-        <Route path="/eglise" element={<PublicChurch />} />
-        <Route path="/publications" element={<Publications />} />
         <Route path="/login" element={<Login />} />
         <Route path="/p/:slug" element={<PublicEvent />} />
         <Route

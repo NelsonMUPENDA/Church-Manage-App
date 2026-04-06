@@ -1,42 +1,28 @@
 import os
 
-from urllib.parse import urlparse
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SECRET_KEY = 'django-insecure-change-me'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
 
-DATABASE_URL = os.getenv('DATABASE_URL')
+ALLOWED_HOSTS = [
+    'consolationetpaixdivine.org',
+    'www.consolationetpaixdivine.org',
+]
 
-if DATABASE_URL:
-    parsed = urlparse(DATABASE_URL)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': parsed.path.lstrip('/'),
-            'USER': parsed.username,
-            'PASSWORD': parsed.password,
-            'HOST': parsed.hostname,
-            'PORT': str(parsed.port or 5432),
-        }
+# Configuration SQLite (pas besoin de serveur de base de données séparé)
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'consolation_et_paix_divine',
-            'USER': 'postgres',
-            'PASSWORD': 'admin',
-            'HOST': 'localhost',
-            'PORT': '5432',  # Default port is 5432
-        }
-    }
+}
 
-# Other basic Django settings can be added here as needed.
+DEBUG = False
 
-DEBUG = True
-
-ALLOWED_HOSTS = ['*'] if DEBUG else ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = [
+    'consolationetpaixdivine.org', 
+    'www.consolationetpaixdivine.org'
+]
 
 INSTALLED_APPS = [
     'corsheaders',
@@ -53,8 +39,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'church_management.security_middleware.RateLimitMiddleware',
-    'church_management.security_middleware.SecurityHeadersMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -114,28 +98,22 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+LANGUAGE_CODE = 'fr-FR'
+TIME_ZONE = 'Europe/Paris'
 USE_I18N = True
 USE_TZ = True
 
+# Fichiers statiques (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# Fichiers médias (uploads utilisateurs)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 AUTH_USER_MODEL = 'church_management.User'
-
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-]
-
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -169,7 +147,7 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@cpd.local')
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Consolation et Paix Divine API',
-    'DESCRIPTION': 'API REST pour la gestion de l’église Consolation et Paix Divine.',
+    'DESCRIPTION': 'API REST pour la gestion de l\’église Consolation et Paix Divine.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
